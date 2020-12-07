@@ -59,9 +59,9 @@ SSL_CTX* create_ctx_server(char *certificate_file, char *private_key_file, int v
 
 	/* Check if the server certificate and private-key matches */
 	if (!SSL_CTX_check_private_key(ctx)) {
-    	fprintf(stderr,"Private key does not match the certificate public key\n");
+		fprintf(stderr,"Private key does not match the certificate public key\n");
 		SSL_CTX_free(ctx);
-    	exit(1);
+		exit(1);
   	}
 
 	if (verify_client) {
