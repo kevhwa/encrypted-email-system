@@ -1,0 +1,70 @@
+# OpenSSL root CA configuration file.
+
+[ ca ]
+default_ca = CA_default
+
+[ CA_default ]
+# Directory and file locations.
+dir               = ${ENV::ROOT_CA_DIR}        # top directory
+certs             = $dir/certs                 # certificate dir
+new_certs_dir     = $dir/newcerts              # new certificates dir
+database          = $dir/index.txt             # database holds cerificate info
+serial            = $dir/serial                # mandatory; a textfile containing next serial number to use in hex
+RANDFILE          = $dir/private/.rand         # a random number file
+private_key       = $dir/private/ca.key.pem    # location of root CA's private key
+certificate       = $dir/certs/ca.cert.pem     # localtion of root CA's certificate
+default_md        = sha256                     # message digest to use
+name_opt          = ca_default                 # subject name display option
+cert_opt          = ca_default                 # certificate display option
+default_days      = 375                        # how long to certify for
+preserve          = no
+policy            = policy_strict              # see below; decides which fields should be mandatory and/or match CA
+
+# For certificate revocation lists - Not needed for this assignment, but for reference
+crlnumber         = $dir/crlnumber
+crl               = $dir/crl/ca.crl.pem
+crl_extensions    = crl_ext
+default_crl_days  = 30
+
+[ policy_strict ]
+# The root CA should only sign intermediate certificates that match the following:
+countryName             = match
+stateOrProvinceName     = match
+organizationName        = match
+organizationalUnitName  = optional
+commonName              = supplied
+emailAddress            = optional
+
+[ req ]
+default_bits        = 2048                      # RSA key size
+distinguished_name  = req_distinguished_name    # DN section
+string_mask         = utf8only                  # Emit UTF-8 strings
+default_md          = sha256
+x509_extensions     = v3_ca                     # Extension to add when the -x509 option is used.
+prompt              = no                        # Make the creation of the certificate automated, take fields from this file directly
+
+[ req_distinguished_name ]
+countryName                     = US
+stateOrProvinceName             = New York
+localityName                    = New York City
+0.organizationName              = Best CA Global
+organizationalUnitName          = Best CA Global LLC
+commonName                      = Best CA LLC
+emailAddress                    = mmf2171@columbia.edu
+
+# ---- Assume the Root CA will only sign for other CAs ------ #
+# See extensions for typical CA here: https://linux.die.net/man/5/x509v3_config
+# or via `man x509v3_config`; more notes in intermediate_ca.cnf.
+
+[ v3_ca ]
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always,issuer
+basicConstraints = critical, CA:true
+keyUsage = critical, digitalSignature, cRLSign, keyCertSign
+
+[ v3_intermediate_ca ]
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always,issuer
+basicConstraints = critical, CA:true, pathlen:0                 # pathlen specifies that intermediate ca cannot create other cas
+keyUsage = critical, digitalSignature, cRLSign, keyCertSign
+

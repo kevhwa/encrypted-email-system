@@ -1,0 +1,112 @@
+# OpenSSL intermediate CA configuration file.
+# For more information on specifications, visit Root configuration file
+
+[ ca ]
+default_ca = CA_default
+
+[ CA_default ]
+# Directory and file locations.
+dir               = ${ENV::INTERMEDIATE_CA_DIR}
+certs             = $dir/certs
+crl_dir           = $dir/crl
+new_certs_dir     = $dir/newcerts
+database          = $dir/index.txt
+serial            = $dir/serial
+RANDFILE          = $dir/private/.rand
+private_key       = $dir/private/intermediate.key.pem
+certificate       = $dir/certs/intermediate.cert.pem
+default_md        = sha256
+name_opt          = ca_default
+cert_opt          = ca_default
+default_days      = 375
+preserve          = no
+policy            = policy_loose     # note that this is different from root ca configurations
+
+# This open is to ensure that SANs are copied into the certificates created
+# NOTE: This has to be used with caution; here we make the assumption that you can trust the
+# extentions in the CSR, but in the real world, this may not be the case. For example, someone might
+# try to set CA = TRUE so that the CA creates them a subordinate CA
+copy_extensions   = copy
+
+# For certificate revocation lists - Not needed for this assignment, but for reference
+crlnumber         = $dir/crlnumber
+crl               = $dir/crl/intermediate.crl.pem
+crl_extensions    = crl_ext
+default_crl_days  = 30
+
+[ policy_loose ]
+# Allow the Intermediate CA to sign a range of certificates
+countryName             = optional
+stateOrProvinceName     = optional
+localityName            = optional
+organizationName        = optional
+organizationalUnitName  = optional
+commonName              = supplied
+emailAddress            = optional
+
+[ req ]
+default_bits        = 2048
+distinguished_name  = req_distinguished_name
+string_mask         = utf8only
+default_md          = sha256
+prompt              = no   # Make the creation of the certificate automated, take fields from this file directly
+
+[ req_distinguished_name ]
+countryName                     = US
+stateOrProvinceName             = New York
+localityName                    = New York City
+0.organizationName              = Best CA Global
+organizationalUnitName          = Best CA Global LLC
+commonName                      = Best CA Intermediate LLC
+emailAddress                    = mmf2171@columbia.edu
+
+# ---- The Intermediate CA will only be signing User, Server, Signing, & Encryption Certificates ---
+# Explanation of configurations:
+# * basicConstraints extention is used to mark certificates as belonging to a CA,
+#   giving them the ability to sign other certificates.
+# * keyUsage/extendedKeyUsage restrict what a certificate can be used for; if the extensions are present,
+# 	then only the listed uses are allowed; if they're not present, there are no restrictions.
+# * extendedKeyUsage is a list of values indiciating purpose for which a certificate public key can be used.
+#   (serverAuth: SSL/TLS Web Server Auth, clientAuth: SSL/TLS Web Client Auth)
+# * subjectKeyIdentifer (hex or hash, but hex is strongly discouraged)
+# * nsCertType is used to indicate purpose of certificate
+# * nsComment is a string extension containg a comment that is display when the certificate is viewed in
+#   some browsers
+#
+# See https://docs.oracle.com/cd/B14099_19/idmanage.1012/b14080/appendixd.htm for more details on certificate
+# usages and their corresponding keyUsage/extendedKeyUsage settings.
+
+[ usr_cert ]
+basicConstraints = CA:FALSE
+nsCertType = client, email
+nsComment = "OpenSSL Generated Client Certificate"
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid,issuer
+keyUsage = critical, nonRepudiation, digitalSignature, keyEncipherment
+extendedKeyUsage = clientAuth, emailProtection
+
+[ server_cert ]
+basicConstraints = CA:FALSE
+nsCertType = server
+nsComment = "OpenSSL Generated Server Certificate"
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid,issuer:always
+keyUsage = critical, digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth
+
+[ encryption_cert ]
+# Create a certificate for encrypting files
+basicConstraints = CA:FALSE
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid,issuer:always
+keyUsage = critical, dataEncipherment, keyEncipherment
+extendedKeyUsage = emailProtection
+
+[ signing_cert ]
+# Enables verifiable signature (i.e., no tampering) for documents or provides of code/other signed files.
+basicConstraints = CA:FALSE
+nsCertType = objsign
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid,issuer:always
+keyUsage = critical, digitalSignature, nonRepudiation
+extendedKeyUsage = critical, codeSigning, emailProtection

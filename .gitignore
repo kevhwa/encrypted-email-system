@@ -50,3 +50,13 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+.project
+.settings
+.DS_Store
+
+rootca-dir
+server-dir
+client-dir
+bin/getcert
+bin/server
