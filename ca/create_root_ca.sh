@@ -3,7 +3,7 @@
 
 echo -e "\nCreating Root Certificate Authority\n"
 
-# 2. Create a directory structure; the index.txt and serial files act as a db for signed certificates.
+# 1. Create a directory structure; the index.txt and serial files act as a db for signed certificates.
 # Move the configuration file for the root server to this location.
 
 cp ./ca/root_ca.cnf ./rootca-dir/root_ca.cnf
@@ -13,14 +13,14 @@ chmod 700 private
 touch index.txt
 echo 1000 > serial
 
-# 3. Create the root key
+# 2. Create the root key
 # Encrypt the private key with AES256 and output the key to the specified file
 # 4096 is the size of the private key that is generated in bits (how to protect the key).
 
 openssl genrsa -aes256 -out private/ca.key.pem 4096
 chmod 400 private/ca.key.pem
 
-# 4. Create the self-signed root certificate
+# 3. Create the self-signed root certificate
 # Use the root key just created to create root certificate ca.cert.pm. This certificate
 # should have a long expiration date because when it expires, all certificates signed by CA
 # become invalid.
@@ -42,7 +42,7 @@ openssl req -config root_ca.cnf \
 
 chmod 444 ./certs/ca.cert.pem
 
-# 6. Verify the certificate
+# 4. Verify the certificate
 # The x509 command is used to display certificate information, convert certificates, sign certificate
 # requests or edit certificate trust settings. Note that the 'Issuer' and 'Subject' are identical as
 # the certificate is self-signed.

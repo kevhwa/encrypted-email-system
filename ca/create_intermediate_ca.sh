@@ -3,7 +3,7 @@
 
 echo "\nCreating Intermediate CA\n"
 
-# 2. Create a directory structure, same as used for root CA files.
+# 1. Create a directory structure, same as used for root CA files.
 # Make sure to move the configuration file for OpenSSL to this directory.
 # Note that working with the crl is not part of this assignment, but was added
 # for documentation purposes
@@ -16,7 +16,7 @@ touch index.txt
 echo 1000 > serial
 echo 1000 > crlnumber  # this used to keep track of CRL in normal cases, here just for documentation
 
-# 3. Create the intermediate key (intermediate.key.pem) using AES 256 bit encryption and a password.
+# 2. Create the intermediate key (intermediate.key.pem) using AES 256 bit encryption and a password.
 # See command-line option eplanation in Root CA section.
 
 echo "Starting genrsa"
@@ -24,7 +24,7 @@ openssl genrsa -aes256 -passout pass:pass -out ./private/intermediate.key.pem 40
 
 chmod 400 ./private/intermediate.key.pem
 
-# 4. Create intermediate certificate signing request (CSR)
+# 3. Create intermediate certificate signing request (CSR)
 # Take the intermediate key from step 4 to create a certificate signing request (CSR).
 # Note that compared to the root certificate, we do not use -x509 argument.
 
@@ -34,7 +34,7 @@ openssl req -config intermediate_ca.cnf -new \
 	-out ./csr/intermediate.csr.pem \
 	-passin pass:pass
 
-# 5. Create intermediate CA certificate using the root CA
+# 4. Create intermediate CA certificate using the root CA
 # For the intermediate CA, use the 'v3_intermediate_ca' extension to sign the CSR. The intermediate
 # certificate should be valid for a shorter period of time than the root CA. Note that the index.txt
 # file stores the certificate database.
@@ -54,19 +54,19 @@ openssl ca -config ../../rootca-dir/root_ca.cnf -extensions v3_intermediate_ca \
 
 chmod 444 ./certs/intermediate.cert.pem
 
-# 7. Verify the intermediate certificate
+# 5. Verify the intermediate certificate
 # Same as with the root certificate, see details.
 
 echo "Verifying intermediate certificate"
 openssl x509 -noout -text -in ./certs/intermediate.cert.pem
 
-# 8. Verify that the chain of trust is intact
+# 6. Verify that the chain of trust is intact
 # It should say OK.
 
 echo "Verifying intermediate CA certificate against root CA certificate - it should say OK"
 openssl verify -CAfile certs/ca.cert.pem ./certs/intermediate.cert.pem
 
-# 9. Complete Certificate chain
+# 7. Complete Certificate chain
 # In order to applications to be able to verify the intermediate cert against root, need to add CA certificate chain
 # by concatenating the intermediate and root certificates together.
 
