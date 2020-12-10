@@ -1,6 +1,14 @@
 #!/bin/bash
 # Use this script to create the Intermediate CA
 
+dir="$1"
+
+[ $# -eq 0 ] && { echo "Usage: $0 dir-name"; exit 1; }
+
+cwd=$(pwd)
+export ROOT_CA_DIR=$cwd/$dir/rootca-dir
+export INTERMEDIATE_CA_DIR=$cwd/$dir/server-dir/ca
+
 echo "\nCreating Intermediate CA\n"
 
 # 1. Create a directory structure, same as used for root CA files.
@@ -8,8 +16,8 @@ echo "\nCreating Intermediate CA\n"
 # Note that working with the crl is not part of this assignment, but was added
 # for documentation purposes
 
-cp ./ca/intermediate_ca.cnf ./server-dir/ca/intermediate_ca.cnf
-cd server-dir/ca
+cp ./ca/intermediate_ca.cnf ./$dir/server-dir/ca/intermediate_ca.cnf
+cd ./$dir/server-dir/ca
 mkdir -p certs crl csr newcerts private
 chmod 700 private
 touch index.txt
@@ -64,7 +72,7 @@ openssl x509 -noout -text -in ./certs/intermediate.cert.pem
 # It should say OK.
 
 echo "Verifying intermediate CA certificate against root CA certificate - it should say OK"
-openssl verify -CAfile certs/ca.cert.pem ./certs/intermediate.cert.pem
+openssl verify -CAfile ../../rootca-dir/certs/ca.cert.pem ./certs/intermediate.cert.pem
 
 # 7. Complete Certificate chain
 # In order to applications to be able to verify the intermediate cert against root, need to add CA certificate chain

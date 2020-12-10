@@ -1,24 +1,38 @@
 #!/bin/bash
 # Use this script to create the Root CA
 
+dir="$1"
+
+[ $# -eq 0 ] && { echo "Usage: $0 dir-name"; exit 1; }
+
+cwd=$(pwd)
+export ROOT_CA_DIR=$cwd/$dir/rootca-dir 
+
 echo -e "\nCreating Root Certificate Authority\n"
 
 # 1. Create a directory structure; the index.txt and serial files act as a db for signed certificates.
 # Move the configuration file for the root server to this location.
 
-cp ./ca/root_ca.cnf ./rootca-dir/root_ca.cnf
-cd ./rootca-dir
+cp ./ca/root_ca.cnf ./$dir/rootca-dir/root_ca.cnf
+cd ./$dir/rootca-dir
+
+pwd
+
 mkdir -p certs crl newcerts private
 chmod 700 private
 touch index.txt
 echo 1000 > serial
 
+ls
+
 # 2. Create the root key
 # Encrypt the private key with AES256 and output the key to the specified file
 # 4096 is the size of the private key that is generated in bits (how to protect the key).
 
-openssl genrsa -aes256 -out private/ca.key.pem 4096
+openssl genrsa -aes256 -passout pass:pass -out private/ca.key.pem 4096
 chmod 400 private/ca.key.pem
+
+echo "got here"
 
 # 3. Create the self-signed root certificate
 # Use the root key just created to create root certificate ca.cert.pm. This certificate
@@ -38,7 +52,8 @@ chmod 400 private/ca.key.pem
 openssl req -config root_ca.cnf \
 	-key private/ca.key.pem \
 	-new -x509 -days 1000 -sha256 -extensions v3_ca \
-    -out certs/ca.cert.pem
+    -out certs/ca.cert.pem \
+	-passin pass:pass
 
 chmod 444 ./certs/ca.cert.pem
 
