@@ -10,6 +10,11 @@ $ ./ca/create_root_ca.sh tree
 $ ./ca/create_intermediate_ca.sh tree
 ```
 
+#### Build
+```
+$ make all
+```
+
 #### To run what we have:
 ```
 $ cd tree
