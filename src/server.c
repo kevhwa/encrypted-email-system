@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include <strings.h>
 #include <unistd.h>  
 #include <netdb.h>
@@ -11,7 +12,7 @@
 #include "create_ctx.h"
 #include "server.h"
 
-#define SERVER_PORT 1000
+#define SERVER_PORT 8080
 #define ON  1
 #define OFF 0
 
@@ -38,6 +39,8 @@ int main(int argc, char **argv) {
         struct sockaddr_in client_addr;         
         socklen_t alen = sizeof(client_addr); 
 
+        fprintf(stdout, "\nWaiting for connection\n");
+
         rqst = accept(sock, (struct sockaddr *)&client_addr, &alen);
         if (rqst < 0) {
             fprintf(stderr, "Unable to accept connection...\n");
@@ -47,7 +50,8 @@ int main(int argc, char **argv) {
         sbio = BIO_new_socket(rqst, BIO_NOCLOSE);
         ssl = SSL_new(ctx);
         SSL_set_bio(ssl, sbio, sbio);
-        err = SSL_accept(ssl); 
+        err = SSL_accept(ssl);
+         
         if (err != 1) {
             switch (SSL_get_error(ssl, err)) {
             case SSL_ERROR_NONE:
@@ -97,11 +101,33 @@ int main(int argc, char **argv) {
         char buf[4096];
         err = SSL_read(ssl, buf, sizeof(buf) - 1);
         buf[err] = '\0';
-        fprintf(stdout, "Received %d chars:'%s'\n", err, buf);
+        fprintf(stdout, "Received %d chars: %s\n", err, buf);
+
+        char cert_buf[4096];
+        int temp = SSL_read(ssl, cert_buf, sizeof(cert_buf) - 1);
+        printf("certificate: %s\n", cert_buf);
+
+        // char path_buf[100];
+        // snprintf(path_buf, sizeof(path_buf), "test.pem");
+
+        // FILE *x509_file = fopen(path_buf, "wb");
+        // if(!x509_file) {
+        //     printf("Unable to open cert req file for writing.\n");
+        //     return NULL;
+        // }
+        
+        // /* Write the certificate to disk. */
+        // int ret = PEM_write_X509_REQ(x509_file, (X509_REQ *) cert_buf);
+        // fclose(x509_file);
+
+
+        // printf("size of cert buf %ld\n", strlen(cert_buf));
+        // cert_buf[err] = '\0';
+        // fprintf(stdout, "Received certificate - %d chars: %s\n", err, cert_buf);
 
         /* Send data to the SSL client */
-        char *msg  = "This message is from the SSL server\n";
-        // char *msg = handle_recvd_msg(buf);
+        // char *msg  = "This message is from the SSL server\n";
+        char *msg = handle_recvd_msg(buf);
         err = SSL_write(ssl, msg, strlen(msg));
 
         SSL_shutdown(ssl);
@@ -144,20 +170,20 @@ int tcp_listen() {
     return sock;
 }
 
-char* handle_recvd_msg (char* buf) {
-    char* bad_request = "HTTP/1.0 400 Bad Request\ncontent-length: 0\n\n"; 
+char *handle_recvd_msg (char* buf) {
 
-    char* getcert = "POST /getcert HTTP/1.0";
-    char* changepw = "POST /changepw HTTP/1.0";
-    char* sendmsg = "POST /sendmsg HTTP/1.0";
-    char* recvmsg = "POST /recvmsg HTTP/1.0";
+    char *bad_request = "HTTP/1.0 400 Bad Request\ncontent-length: 0\n\n"; 
+    char *getcert = "POST /getcert HTTP/1.0";
+    char *changepw = "POST /changepw HTTP/1.0";
+    char *sendmsg = "POST /sendmsg HTTP/1.0";
+    char *recvmsg = "POST /recvmsg HTTP/1.0";
 
-    char* buf_cpy = (char*) malloc(strlen(buf) + 1);
+    char buf_cpy[strlen(buf) + 1];
     strcpy(buf_cpy, buf);
     buf_cpy[strlen(buf)] = '\0';
 
     // get first line of message    
-    char* line = strtok(buf_cpy, "\n");
+    char *line = strtok(buf_cpy, "\n");
     if (line == NULL) {
         return bad_request;
     }
@@ -175,31 +201,37 @@ char* handle_recvd_msg (char* buf) {
 
     // invalid request
     if (command == InvalidCommand) { 
-        return "HTTP/1.0 404 Not Found\ncontent-Length: 0\n\n";
+        return "HTTP/1.0 404 Not Found\nContent-Length: 0\n\n";
     }
 
     // get second line
     line = strtok(NULL, "\n");
 
-    char* content_length_headername = "content-length:";
+    char *content_length_headername = "content-length:";
     if (line == NULL || strncasecmp(content_length_headername, line, strlen(content_length_headername)) != 0) {
         return bad_request;
     }
-    char* content_length_val = strchr(line, ':');
+    char *content_length_val = strchr(line, ':');
+    printf("content length: %s\n", content_length_val);
+
     if (content_length_val == NULL) {
         return bad_request;
     }
     int content_length = atoi(content_length_val + 1);
 
     // get rest of the request
-    char* rest_of_req = strtok(NULL, "");
+    char *rest_of_req = strtok(NULL, "");
 
     // the first character should be a newline to indicate end of header section
     if (rest_of_req == NULL || strncmp("\n", rest_of_req, 1)) {
         return bad_request;
     }
-    char* body = malloc(sizeof(content_length) + 1);
+    
+    char *body = malloc(sizeof(char) * (content_length + 1));
+    memset(body, 0, sizeof(content_length) + 1);
+
     strncpy(body, rest_of_req + 1, content_length);
     body[content_length] = '\0';
     return body;
 }
+
