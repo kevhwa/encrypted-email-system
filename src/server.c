@@ -101,6 +101,7 @@ int main(int argc, char **argv) {
 
         /* Send data to the SSL client */
         char *msg  = "This message is from the SSL server\n";
+        // char *msg = handle_recvd_msg(buf);
         err = SSL_write(ssl, msg, strlen(msg));
 
         SSL_shutdown(ssl);

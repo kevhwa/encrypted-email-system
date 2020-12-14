@@ -17,6 +17,6 @@ enum server_command {
 
 int tcp_listen();
 
-void handle_recvd_msg(char* buf);
+char* handle_recvd_msg(char* buf);
 
 #endif /* SRC_SERVER_H_ */
