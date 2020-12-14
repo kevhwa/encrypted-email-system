@@ -11,18 +11,26 @@
 #include <openssl/err.h>
 
 #include "create_ctx.h"
+#include "user_io.h"
 
 int tcp_connection(char *host_name, int port);
+void print_usage_information();
 
-/*
- * Compile with -lssl -lcrypto
- *
- */
+
 int main(int argc, char **argv) {
 	int err;
 	char *s;
 	SSL_CTX *ctx;
 	int sock;
+	
+	int MAX_LENGTH = 20;
+	char pass[MAX_LENGTH];
+	char uname[MAX_LENGTH];
+
+	if (get_username_password(argc, argv, pass, uname, MAX_LENGTH) < 0) {
+		print_usage_information();
+		exit(1);
+	}
 
 	// create the SSL context; note that no certificate
 	// and private key are provided; this will run with username/password
@@ -83,27 +91,13 @@ int main(int argc, char **argv) {
 	}
 
 	int ilen;
-	char ibuf[512];
+	char ibuf[4096];
+	char obuf[4096];
+	char content_buf[4000];
 
-	char obuf[512];
-
-	char *uname = argv[1];
-	char *pass = argv[2];
-	char *key = argv[3];
-	sprintf(obuf, "POST /getcert HTTP/1.0\nContent-Length:X\n\n%s\n%s\n%s\n\n", uname, pass, key);
-
-	// getcert
-	// POST https://localhost:1000/cert HTTP/1.0\nContent-Length:X\nusername\npassword\npublic_key\n\n: 
-	
-	// changepw
-	// POST https://localhost:1000/pass HTTP/1.0\nContent-Length:X\nusername\npassword\n\n: 
-
-	// user has public/private key
-	// user creates their own CSR
-	// getcert sends CSR to server
-	// server verifies CSR and signs it, creates certificate
-	// server saves client certificate on server-side and sends certificate back to client
-	// client saves their signed certificate
+	char *csr = "This is a CSR";
+	sprintf(content_buf, "%s\n%s\n%s\n", uname, pass, csr);
+	sprintf(obuf, "POST /getcert HTTP/1.0\nContent-Length:%lu\n\n%s", strlen(content_buf), content_buf);
 
 	SSL_write(ssl, obuf, strlen(obuf));
 	while ((ilen = SSL_read(ssl, ibuf, sizeof ibuf - 1)) > 0) {
@@ -146,3 +140,13 @@ int tcp_connection(char *host_name, int port) {
 	return sock;
 }
 
+/**
+ * Print out usage information, if user did not provide the correct arguments
+ * for the program.
+ */
+void print_usage_information() {
+	fprintf(stderr, "Usage of this program requires specification of the following flag(s):\n"
+			"* [-u] a valid username (required)\n"
+			"* [-p] a valid password (optional, you will be prompted if not provided)\n"
+			"Example usage: getcert -u username -p password\n\n");
+}
