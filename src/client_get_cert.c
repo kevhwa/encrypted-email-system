@@ -16,13 +16,12 @@
 int tcp_connection(char *host_name, int port);
 void print_usage_information();
 
-
 int main(int argc, char **argv) {
 	int err;
 	char *s;
 	SSL_CTX *ctx;
 	int sock;
-	
+
 	int MAX_LENGTH = 20;
 	char pass[MAX_LENGTH];
 	char uname[MAX_LENGTH];
@@ -97,7 +96,8 @@ int main(int argc, char **argv) {
 
 	char *csr = "This is a CSR";
 	sprintf(content_buf, "%s\n%s\n%s\n", uname, pass, csr);
-	sprintf(obuf, "POST /getcert HTTP/1.0\nContent-Length:%lu\n\n%s", strlen(content_buf), content_buf);
+	sprintf(obuf, "POST /getcert HTTP/1.0\nContent-Length:%lu\n\n%s",
+			strlen(content_buf), content_buf);
 
 	SSL_write(ssl, obuf, strlen(obuf));
 	while ((ilen = SSL_read(ssl, ibuf, sizeof ibuf - 1)) > 0) {
@@ -145,8 +145,9 @@ int tcp_connection(char *host_name, int port) {
  * for the program.
  */
 void print_usage_information() {
-	fprintf(stderr, "Usage of this program requires specification of the following flag(s):\n"
-			"* [-u] a valid username (required)\n"
-			"* [-p] a valid password (optional, you will be prompted if not provided)\n"
-			"Example usage: getcert -u username -p password\n\n");
+	fprintf(stderr,
+			"Usage of this program requires specification of the following flag(s):\n"
+					"* [-u] a valid username (required)\n"
+					"* [-p] a valid password (optional, you will be prompted if not provided)\n"
+					"Example usage: getcert -u username -p password\n\n");
 }

@@ -55,6 +55,7 @@ dkms.conf
 .settings
 .DS_Store
 .vscode/
+.cproject
 
 rootca-dir
 server-dir
