@@ -84,7 +84,13 @@ int main(int argc, char **argv) {
 
 	int ilen;
 	char ibuf[512];
-	char *obuf = "GET / HTTP/1.0\n\n";
+
+	char obuf[512];
+
+	char *uname = argv[1];
+	char *pass = argv[2];
+	char *key = argv[3];
+	sprintf(obuf, "POST /getcert HTTP/1.0\nContent-Length:X\n\n%s\n%s\n%s\n\n", uname, pass, key);
 
 	// getcert
 	// POST https://localhost:1000/cert HTTP/1.0\nContent-Length:X\nusername\npassword\npublic_key\n\n: 

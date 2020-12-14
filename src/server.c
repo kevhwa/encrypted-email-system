@@ -6,8 +6,10 @@
 #include <openssl/ssl.h>
 #include <openssl/bio.h>
 #include <openssl/err.h>
+#include <ctype.h>
 
 #include "create_ctx.h"
+#include "server.h"
 
 #define SERVER_PORT 1000
 #define ON  1
@@ -139,4 +141,64 @@ int tcp_listen() {
     }
 
     return sock;
+}
+
+char* handle_recvd_msg (char* buf) {
+    char* bad_request = "HTTP/1.0 400 Bad Request\ncontent-length: 0\n\n"; 
+
+    char* getcert = "POST /getcert HTTP/1.0";
+    char* changepw = "POST /changepw HTTP/1.0";
+    char* sendmsg = "POST /sendmsg HTTP/1.0";
+    char* recvmsg = "POST /recvmsg HTTP/1.0";
+
+    char* buf_cpy = (char*) malloc(strlen(buf) + 1);
+    strcpy(buf_cpy, buf);
+    buf_cpy[strlen(buf)] = '\0';
+
+    // get first line of message    
+    char* line = strtok(buf_cpy, "\n");
+    if (line == NULL) {
+        return bad_request;
+    }
+
+    enum server_command command = InvalidCommand;
+    if (strcmp(getcert, line) == 0) {
+        command = GetCert;
+    } else if (strcmp(changepw, line) == 0) { 
+        command = ChangePW;
+    } else if (strcmp(sendmsg, line) == 0) {
+        command = SendMsg;
+    } else if (strcmp(recvmsg, line) == 0) {
+        command = RecvMsg;
+    }
+
+    // invalid request
+    if (command == InvalidCommand) { 
+        return "HTTP/1.0 404 Not Found\ncontent-Length: 0\n\n";
+    }
+
+    // get second line
+    line = strtok(NULL, "\n");
+
+    char* content_length_headername = "content-length:";
+    if (line == NULL || strncasecmp(content_length_headername, line, strlen(content_length_headername)) != 0) {
+        return bad_request;
+    }
+    char* content_length_val = strchr(line, ':');
+    if (content_length_val == NULL) {
+        return bad_request;
+    }
+    int content_length = atoi(content_length_val + 1);
+
+    // get rest of the request
+    char* rest_of_req = strtok(NULL, "");
+
+    // the first character should be a newline to indicate end of header section
+    if (rest_of_req == NULL || strncmp("\n", rest_of_req, 1)) {
+        return bad_request;
+    }
+    char* body = malloc(sizeof(content_length) + 1);
+    strncpy(body, rest_of_req + 1, content_length);
+    body[content_length] = '\0';
+    return body;
 }
