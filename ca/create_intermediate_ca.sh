@@ -27,8 +27,9 @@ echo 1000 > crlnumber  # this used to keep track of CRL in normal cases, here ju
 # 2. Create the intermediate key (intermediate.key.pem) using AES 256 bit encryption and a password.
 # See command-line option eplanation in Root CA section.
 
+#-aes256 -passout pass:pass
 echo "Starting genrsa"
-openssl genrsa -aes256 -passout pass:pass -out ./private/intermediate.key.pem 4096
+openssl genrsa -out ./private/intermediate.key.pem 4096
 
 chmod 400 ./private/intermediate.key.pem
 

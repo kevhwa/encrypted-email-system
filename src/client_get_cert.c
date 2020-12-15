@@ -166,7 +166,7 @@ int main(int argc, char **argv) {
 int write_x509_to_file(char *x509, char *path) {
 	
 	FILE *p_file = NULL;
-	if (!(p_file = fopen(path, "w"))) {
+	if (!(p_file = fopen(path, "wb+"))) {
 		printf("Failed to open file for X509 certificate\n");
 		return 0;
 	}
@@ -245,7 +245,12 @@ X509_REQ* generate_cert_req(EVP_PKEY *p_key, char *username, int *size) {
 		goto CLEANUP;
 	}
 
-	if (0 > X509_REQ_sign(p_x509_req, p_key, EVP_sha256())) {
+	X509_NAME *name = X509_REQ_get_subject_name(p_x509_req);
+	X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC, (const unsigned char *) username, -1, -1, 0);
+	X509_NAME_add_entry_by_txt(name, "O", MBSTRING_ASC, (const unsigned char *) "A Really Cool Organization", -1, -1, 0);
+	X509_NAME_add_entry_by_txt(name, "C", MBSTRING_ASC, (const unsigned char *) "US", -1, -1, 0);
+
+	if (X509_REQ_sign(p_x509_req, p_key, EVP_sha256()) < 0) {
 		printf("Failed to sign the X509 REQ.\n");
 		X509_REQ_free(p_x509_req);
 		p_x509_req = NULL;

@@ -246,7 +246,7 @@ X509_REQ *read_x509_req_from_file(char *uname, char *path) {
 int write_x509_cert_to_file(X509 *cert, char *path) {
 
     FILE *p_file = NULL;
-    if (NULL == (p_file = fopen(path, "w"))) {
+    if (NULL == (p_file = fopen(path, "wb+"))) {
         printf("Failed to open file for saving csr\n");
         return 0;
     }
@@ -263,7 +263,7 @@ int write_x509_cert_to_file(X509 *cert, char *path) {
 int read_x509_cert_from_file(char *cert_buf, int size, char *path) {
 
 	FILE *fp;
-	if (!(fp = fopen(path, "r" ))) {
+	if (!(fp = fopen(path, "rb+" ))) {
 		printf("Could not open file to read certificate\n");
 		return 0;
 	}
@@ -348,15 +348,13 @@ int generate_cert(X509_REQ *x509_req, const char *p_ca_path, const char *p_ca_ke
     p_serial_number = ASN1_INTEGER_new();
     randSerial(p_serial_number);
     X509_set_serialNumber(p_generated_cert, p_serial_number);
-/*
-    X509_set_issuer_name(p_generated_cert, X509_REQ_get_subject_name(pCertReq));
-    X509_set_subject_name(p_generated_cert, X509_REQ_get_subject_name(pCertReq));
-*/
 
-/*
+	X509_set_issuer_name(p_generated_cert, X509_get_subject_name(p_ca_cert));
+    X509_set_subject_name(p_generated_cert, X509_REQ_get_subject_name(x509_req));
+
     X509_gmtime_adj(X509_get_notBefore(p_generated_cert), 0L);
     X509_gmtime_adj(X509_get_notAfter(p_generated_cert), 31536000L);
-*/
+
     if (!(p_cert_req_pkey = X509_REQ_get_pubkey(x509_req))) {
         printf("failed to get certificate req pkey\n");
         X509_free(p_generated_cert);
@@ -377,8 +375,6 @@ int generate_cert(X509_REQ *x509_req, const char *p_ca_path, const char *p_ca_ke
         p_generated_cert = NULL;
         goto CLEANUP;
     }
-
-    X509_set_issuer_name(p_generated_cert, X509_get_subject_name(p_ca_cert));
 
     if (X509_sign(p_generated_cert, p_ca_key_pkey, EVP_sha256()) < 0) {
         printf("Failed to sign the certificate\n");
