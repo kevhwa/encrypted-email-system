@@ -142,11 +142,11 @@ int main(int argc, char **argv) {
 		RequestHandler *request_handler = handle_recvd_msg(buf);
 
 		if (!request_handler) {
-			err = SSL_write(ssl, internal_error_resp, strlen(internal_error_resp));
+            err = SSL_write(ssl, internal_error_resp, strlen(internal_error_resp));
 		} else if (request_handler->status_code == BAD_REQUEST) {
-			err = SSL_write(ssl, bad_request_resp, strlen(bad_request_resp));
+            err = SSL_write(ssl, bad_request_resp, strlen(bad_request_resp));
 		} else if (request_handler->status_code == NOT_FOUND) {
-			err = SSL_write(ssl, not_found_resp, strlen(not_found_resp));
+            err = SSL_write(ssl, not_found_resp, strlen(not_found_resp));
 		} else {
             // handle the request
 
@@ -160,7 +160,7 @@ int main(int argc, char **argv) {
 
             printf("Authentication result: %d\n", check_credential(uname_buf, pwd_buf));
             int len_content = strlen(request_handler->request_content);
-		    err = SSL_write(ssl, request_handler->request_content, len_content);
+            err = SSL_write(ssl, request_handler->request_content, len_content);
         }
 
 		SSL_shutdown(ssl);
