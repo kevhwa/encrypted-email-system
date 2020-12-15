@@ -350,7 +350,7 @@ int parse_credentials_from_request_body(char *request_body, char uname[],
 
     // the username should be in the first line of the message
     int i;
-	for (i = 0; i < strlen(buf_cpy) && buf_cpy[i] != '\n' && i < buf_len - 1; i++) {
+    for (i = 0; i < strlen(buf_cpy) && buf_cpy[i] != '\n' && i < buf_len - 1; i++) {
         uname[i] = buf_cpy[i];
     }
 
@@ -366,7 +366,7 @@ int parse_credentials_from_request_body(char *request_body, char uname[],
     // into the password buf, or the rest of the content, or until a new line is hit, 
     // whatever comes first.
     int j = 0;
-	for (i = i + 1; i < strlen(buf_cpy) && buf_cpy[i] != '\n' && j < buf_len - 1; i++) {
+    for (i = i + 1; i < strlen(buf_cpy) && buf_cpy[i] != '\n' && j < buf_len - 1; i++) {
         pwd[j] = buf_cpy[i];
         j++;
     }
