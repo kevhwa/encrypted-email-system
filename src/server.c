@@ -340,9 +340,9 @@ int check_credential(char *username, char *submitted_password){
 int parse_credentials_from_request_body(char *request_body, char uname[], 
             char pwd[], int buf_len) {
 
-	char buf_cpy[strlen(request_body) + 1];
-	strcpy(buf_cpy, request_body);
-	buf_cpy[strlen(request_body)] = '\0';
+    char buf_cpy[strlen(request_body) + 1];
+    strcpy(buf_cpy, request_body);
+    buf_cpy[strlen(request_body)] = '\0';
 
     // set buffers to empty
     memset(uname, 0, buf_len);
