@@ -8,6 +8,7 @@
 #include <openssl/bio.h>
 #include <openssl/err.h>
 #include <ctype.h>
+// #include <crypt.h>  // use if using a linux machine
 
 #include "create_ctx.h"
 #include "server.h"
@@ -25,6 +26,9 @@ const char *internal_error_resp = "HTTP/1.0 500 Internal Server Error\nContent-L
 int tcp_listen();
 RequestHandler* init_request_handler();
 void free_request_handler(RequestHandler *request_handler);
+int check_credential(char *username, char *submitted_password);
+int parse_credentials_from_request_body(char *request_body, char uname[],
+		char pwd[], int buf_len);
 
 int main(int argc, char **argv) {
 	int err;
@@ -144,6 +148,17 @@ int main(int argc, char **argv) {
 		} else if (request_handler->status_code == NOT_FOUND) {
 			err = SSL_write(ssl, not_found_resp, strlen(not_found_resp));
 		} else {
+			// handle the request
+
+			int max_auth_len = 20;
+			char uname_buf[max_auth_len];
+			char pwd_buf[max_auth_len];
+			if (parse_credentials_from_request_body(
+					request_handler->request_content, uname_buf, pwd_buf, max_auth_len) < 0) {
+				err = SSL_write(ssl, bad_request_resp, strlen(bad_request_resp));
+			}
+
+			printf("Authentication result: %d\n", check_credential(uname_buf, pwd_buf));
 			int len_content = strlen(request_handler->request_content);
 			err = SSL_write(ssl, request_handler->request_content, len_content);
 		}
@@ -278,6 +293,94 @@ RequestHandler* handle_recvd_msg(char *buf) {
 
 	request_handler->request_content = body;
 	return request_handler;
+}
+
+/**
+ * Checks a users submitted username and password against the username/password
+ * that is stored for the user in a file on the server
+ */
+int check_credential(char *username, char *submitted_password) {
+
+	// open file for username
+	char path_buf[100];
+	snprintf(path_buf, sizeof(path_buf), "./server-dir/passwords/%s.txt",
+			username);
+	FILE *pw_file = fopen(path_buf, "r");
+	if (!pw_file) {
+		printf("Could not open file containing hashed password for user.\n");
+		return 0;
+	}
+
+	// read in the hashed/salted password (it will be 106 characters)
+	int len_content = 106;
+	char salted_hashed_pw[len_content + 1];
+	size_t content = fread(salted_hashed_pw, 1, len_content, pw_file);
+	salted_hashed_pw[content] = '\0';
+
+	fclose(pw_file);
+
+	// check hashed/salted content with contents of file
+	char *c = crypt(submitted_password, salted_hashed_pw);
+
+	printf("Read password: %s\n", salted_hashed_pw);
+	printf("Recomputed password: %s\n", c);
+
+	if (strncmp(c, salted_hashed_pw, strlen(salted_hashed_pw)) == 0)
+		return 1;
+	return 0;
+}
+
+/**
+ * Parses the username and password from a request body.
+ * Anticipates that the request body contains:
+ * =======
+ * username
+ * password
+ * ========
+ */
+int parse_credentials_from_request_body(char *request_body, char uname[],
+		char pwd[], int buf_len) {
+
+	char buf_cpy[strlen(request_body) + 1];
+	strcpy(buf_cpy, request_body);
+	buf_cpy[strlen(request_body)] = '\0';
+
+	// set buffers to empty
+	memset(uname, 0, buf_len);
+	memset(pwd, 0, buf_len);
+
+	// the username should be in the first line of the message
+	int i;
+	for (i = 0; i < strlen(buf_cpy) && buf_cpy[i] != '\n' && i < buf_len - 1; i++) {
+		uname[i] = buf_cpy[i];
+	}
+
+	// it shouldn't be that the username is too long or the entirety of the request body
+	// if this is the case, then something is wrong; only valid case is when the loop stops
+	// on a new line.
+	if (buf_cpy[i] != '\n') {
+		fprintf(stderr, "Username could not be parsed from request body");
+		return -1;
+	}
+
+	// read in password from the next line; here, we read in all content that can fit
+	// into the password buf, or the rest of the content, or until a new line is hit,
+	// whatever comes first.
+	int j = 0;
+	for (i = i + 1; i < strlen(buf_cpy) && buf_cpy[i] != '\n' && j < buf_len - 1; i++) {
+		pwd[j] = buf_cpy[i];
+		j++;
+	}
+
+	//  if nothing was read-in for the password, it's missing
+	if (strlen(pwd) == 0) {
+		fprintf(stderr, "Password could not be parsed from request body");
+		return -1;
+	}
+
+	printf("Username: %s\n", uname);
+	printf("Password: %s\n", pwd);
+	return 0;
 }
 
 /**
