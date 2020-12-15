@@ -21,15 +21,14 @@
 
 const char *bad_request_resp = "HTTP/1.0 400 Bad Request\nContent-Length: 0\n\n";
 const char *not_found_resp = "HTTP/1.0 404 Not Found\nContent-Length: 0\n\n";
-const char *internal_error_resp =
-		"HTTP/1.0 500 Internal Server Error\nContent-Length: 0\n\n";
-int parse_credentials_from_request_body(char *request_body, char uname[],
-		char pwd[], int buf_len);
+const char *internal_error_resp = "HTTP/1.0 500 Internal Server Error\nContent-Length: 0\n\n";
 
 int tcp_listen();
 RequestHandler* init_request_handler();
 void free_request_handler(RequestHandler *request_handler);
 int check_credential(char *username, char *submitted_password);
+int parse_credentials_from_request_body(char *request_body, char uname[],
+		char pwd[], int buf_len);
 
 int main(int argc, char **argv) {
 	int err;
@@ -114,8 +113,7 @@ int main(int argc, char **argv) {
 		char buf[4096];
 		err = SSL_read(ssl, buf, sizeof(buf) - 1);
 		buf[err] = '\0';
-		fprintf(stdout, "Received %d chars of content:\n---\n%s----\n", err,
-				buf);
+		fprintf(stdout, "Received %d chars of content:\n---\n%s----\n", err, buf);
 
 		char cert_buf[4096];
 		int temp = SSL_read(ssl, cert_buf, sizeof(cert_buf) - 1);
