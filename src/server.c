@@ -304,17 +304,16 @@ int check_credential(char *username, char *submitted_password){
     char salted_hashed_pw[len_content + 1];
 	size_t content = fread(salted_hashed_pw, 1, len_content, pw_file);
 	salted_hashed_pw[content] = '\0';
-    char *ptr = &(salted_hashed_pw[3]);
 
 	fclose(pw_file);
 
     // check hashed/salted content with contents of file
-    char *c = crypt(submitted_password, ptr);
+    char *c = crypt(submitted_password, salted_hashed_pw);
 
-    printf("Read password: %s\n", ptr);
+    printf("Read password: %s\n", salted_hashed_pw);
     printf("Recomputed password: %s\n", c);
 
-    if (strncmp(c, ptr, strlen(ptr)) == 0)
+    if (strncmp(c, salted_hashed_pw, strlen(salted_hashed_pw)) == 0)
         return 1;
     return 0;
 }

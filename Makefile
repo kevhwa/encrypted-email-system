@@ -8,16 +8,16 @@ LDLIBS = -lssl -lcrypto
 all: bin/getcert bin/server
 
 bin/getcert: src/client_get_cert.o src/create_ctx.o src/user_io.o
-	$(CC) $(LDFLAGS) $(LDLIBS) src/client_get_cert.o src/create_ctx.o src/user_io.o -o bin/getcert
+	$(CC) $(LDFLAGS) src/client_get_cert.o src/create_ctx.o src/user_io.o -o bin/getcert $(LDLIBS)
 
 bin/server: src/server.o src/create_ctx.o
-	$(CC) $(LDFLAGS) $(LDLIBS) src/server.o src/create_ctx.o -o bin/server
+	$(CC) $(LDFLAGS) src/server.o src/create_ctx.o -o bin/server $(LDLIBS)
 
 client_get_cert.o: src/client_get_cert.c src/create_ctx.h src/user_io.h
-	$(CC) $(LDFLAGS) $(LDLIBS) -c src/client_get_cert.c
+	$(CC) $(LDFLAGS) -c src/client_get_cert.c $(LDLIBS)
 
 server.o: src/server.c src/create_ctx.h
-	$(CC) $(LDFLAGS) $(LDLIBS) -c src/server.c
+	$(CC) $(LDFLAGS) -c src/server.c $(LDLIBS)
 
 create_ctx.o: src/create_ctx.c src/create_ctx.h
 	$(CC) $(CFLAGS) -c src/create_ctx.c

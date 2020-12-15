@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include <strings.h>
 #include <termios.h>
 #include <unistd.h>
@@ -48,12 +49,12 @@ int fill_username_password_from_args(int argc, char *argv[], char buff_pass[],
 	for (int i = 1; i < argc; i++) {
 
 		// check that -u flag is provided as second arg
-		if (i == 1 & strncmp(argv[i], "-u", 2) != 0) {
+		if ((i == 1) & (strncmp(argv[i], "-u", 2) != 0)) {
 			fprintf(stderr, "Unexpected argument order.\n");
 			return -1;
 		}
 		// check that -p flag is provided as 4th arg
-		else if (i == 3 & strncmp(argv[i], "-p", 2) != 0) {
+		else if ((i == 3) & (strncmp(argv[i], "-p", 2) != 0)) {
 			fprintf(stderr, "Unexpected argument order.\n");
 			return -1;
 		}
