@@ -27,7 +27,7 @@ done
 j=0
 while read line;
 do
-  echo "$line" > "./server-dir/passwords/${input[j]}.txt"
+  echo -n "$line" > "./server-dir/passwords/${input[j]}.txt"
   ((j++))
 done < ../original_hashed_pass.txt
 

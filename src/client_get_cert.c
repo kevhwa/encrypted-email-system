@@ -24,6 +24,7 @@ void print_usage_information();
 EVP_PKEY *generate_key(char *username);
 X509_REQ *generate_cert_req(EVP_PKEY *p_key, char *username, int *size);
 void get_x509_req_as_str(char *uname, char *x509_buf, size_t buf_size);
+int write_x509_to_file(char *x509, char *path);
 
 int main(int argc, char **argv) {
 	int err;
@@ -98,46 +99,86 @@ int main(int argc, char **argv) {
 		return 3;
 	}
 
-	int ilen;
-	char ibuf[4096];
+	// -------- Create a RSA Key Pair and CSR -------- //
 	char obuf[4096];
 	char content_buf[200];
 	int cert_size = 0;
 	EVP_PKEY *p_key;
 
-	// generate a rsa key pair
+	// generate key pair
 	if (!(p_key = generate_key(uname))) {
 		fprintf(stderr, "Could not generate RSA keys.\n");
 		exit(1);
 	}
 
-	// create a certificate request using newly created rsa_key_pair
+	// generate CSR
 	generate_cert_req(p_key, uname, &cert_size);
 	char cert_buf[cert_size + 1];
 	get_x509_req_as_str(uname, cert_buf, cert_size);
 
+	// -------- Provide content to server -------- //
 	// format content to sent to server
 	sprintf(content_buf, "%s\n%s\n", uname, pass);
 	sprintf(obuf, "POST /getcert HTTP/1.0\nContent-Length: %lu\n\n%s",
-			strlen(content_buf) + cert_size, content_buf);
+	strlen(content_buf) + cert_size, content_buf);
 
-	// Prvoide content to server
 	SSL_write(ssl, obuf, strlen(obuf));
 	SSL_write(ssl, cert_buf, cert_size);
 
-	// Get server response 	
-	fprintf(stdout, "\nSERVER RESPONSE:\n");
-	while ((ilen = SSL_read(ssl, ibuf, sizeof ibuf - 1)) > 0) {
-		ibuf[ilen] = '\0';
-		fprintf(stdout, "%s", ibuf);
-	}
+	// --------- Get server response ---------- //
+	char response_buf[4096];
 
-	// Clean Up
+	fprintf(stdout, "\nSERVER RESPONSE:\n");
+	err = SSL_read(ssl, response_buf, sizeof(response_buf) - 1);
+	printf("server said: %s\n", response_buf);
+	response_buf[err] = '\0';
+
+	if (strstr(response_buf, "200 Success")) {
+		printf("Success!\n");
+		
+		char cert_buf[4096];
+		err = SSL_read(ssl, cert_buf, sizeof(cert_buf) - 1);
+		cert_buf[err] = '\0';
+
+		printf("Certificate:\n%s\n", cert_buf);
+		char path_buf[100];
+		snprintf(path_buf, sizeof(path_buf), "client-dir/%s/%s.cert.pem", uname, uname);
+		if (!write_x509_to_file(cert_buf, path_buf)) {
+			printf("Could not save newly generated certificate to a local file.\n");
+		}
+
+	} else {
+		printf("Sorry, your certificate could not be generated.\n");
+	}
+	
+	// ------- Clean Up -------- //
 	EVP_PKEY_free(p_key);
 	SSL_shutdown(ssl);
 	SSL_free(ssl);
 	close(sock);
 	return 0;
+}
+
+/**
+ * Wrties a X509 Certificate to file.
+ * Certificate should be string, not a X509 struct.
+ */
+int write_x509_to_file(char *x509, char *path) {
+	
+	FILE *p_file = NULL;
+	if (!(p_file = fopen(path, "w"))) {
+		printf("Failed to open file for X509 certificate\n");
+		return 0;
+	}
+
+	int write = fwrite(x509, 1, strlen(x509) , p_file);
+	fclose(p_file);
+
+	if (write != strlen(x509)) {
+		printf("Could not write X509 certificate to file\n");
+		return 0;
+	}	
+	return 1;
 }
 
 /**
@@ -213,7 +254,7 @@ X509_REQ* generate_cert_req(EVP_PKEY *p_key, char *username, int *size) {
 
 	CLEANUP: EVP_PKEY_free(p_key);
 
-	// -- Save X509 REQ to a file, saving the size of content written -- 
+	// -- Save X509 REQ to a file, saving the size of content written -- //
 
 	char path_buf[100];
 	snprintf(path_buf, sizeof(path_buf), "./client-dir/%s/cert_req.pem",
@@ -295,7 +336,6 @@ EVP_PKEY* generate_key(char *username) {
 	}
 
 	// --- Save the RSA key to file ----
-
 	char path_buf[100];
 	snprintf(path_buf, sizeof(path_buf), "client-dir/%s/private.key", username);
 
