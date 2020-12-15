@@ -25,6 +25,7 @@ const char *internal_error_resp = "HTTP/1.0 500 Internal Server Error\nContent-L
 int tcp_listen();
 RequestHandler* init_request_handler();
 void free_request_handler(RequestHandler *request_handler);
+int check_credential(char *username, char *submitted_password);
 
 int main(int argc, char **argv) {
 	int err;
@@ -144,9 +145,12 @@ int main(int argc, char **argv) {
 		} else if (request_handler->status_code == NOT_FOUND) {
 			err = SSL_write(ssl, not_found_resp, strlen(not_found_resp));
 		} else {
+            // handle request
 			int len_content = strlen(request_handler->request_content);
 			err = SSL_write(ssl, request_handler->request_content, len_content);
 		}
+
+        printf("Authentication result: %d\n", check_credential("addleness", "Cardin_pwns"));
 
 		SSL_shutdown(ssl);
 		SSL_free(ssl);
@@ -278,6 +282,41 @@ RequestHandler* handle_recvd_msg(char *buf) {
 
 	request_handler->request_content = body;
 	return request_handler;
+}
+
+/**
+ * Checks a users submitted username and password against the username/password
+ * that is stored for the user in a file on the server
+ */
+int check_credential(char *username, char *submitted_password){
+
+    // open file for username
+    char path_buf[100];
+	snprintf(path_buf, sizeof(path_buf), "./server-dir/passwords/%s.txt", username);
+	FILE *pw_file = fopen(path_buf, "r");
+	if (!pw_file) {
+		printf("Could not open file containing hashed password for user.\n");
+		return 0;
+	}
+
+    // read in the hashed/salted password (it will be 106 characters)
+    int len_content = 106;
+    char salted_hashed_pw[len_content + 1];
+	size_t content = fread(salted_hashed_pw, 1, len_content, pw_file);
+	salted_hashed_pw[content] = '\0';
+    char *ptr = &(salted_hashed_pw[3]);
+
+	fclose(pw_file);
+
+    // check hashed/salted content with contents of file
+    char *c = crypt(submitted_password, ptr);
+
+    printf("Read password: %s\n", ptr);
+    printf("Recomputed password: %s\n", c);
+
+    if (strncmp(c, ptr, strlen(ptr)) == 0)
+        return 1;
+    return 0;
 }
 
 /**
