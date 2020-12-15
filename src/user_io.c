@@ -30,7 +30,6 @@ int get_username_password(int argc, char *argv[], char buff_pass[],
 	if (strlen(buff_pass) == 0) {
 		get_hidden_pw(buff_pass, max_len);
 	}
-
 	return 0;
 }
 
