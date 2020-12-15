@@ -23,6 +23,7 @@ int tcp_connection(char *host_name, int port);
 void print_usage_information();
 EVP_PKEY *generate_key(char *username);
 X509_REQ *generate_cert_req(EVP_PKEY *p_key, char *username, int *size);
+void get_x509_req_as_str(char *uname, char *x509_buf, size_t buf_size);
 
 int main(int argc, char **argv) {
 	int err;
@@ -101,38 +102,38 @@ int main(int argc, char **argv) {
 	char ibuf[4096];
 	char obuf[4096];
 	char content_buf[200];
-
 	int cert_size = 0;
-	EVP_PKEY *p_key = generate_key(uname);
-	X509_REQ *cert_req = generate_cert_req(p_key, uname, &cert_size);
+	EVP_PKEY *p_key;
 
-	printf("size of cert request: %d\n", cert_size);
-	
-	char path_buf[100];
-	snprintf(path_buf, sizeof(path_buf), "./client-dir/%s/cert_req.pem", uname);
-	FILE* cert_file = fopen(path_buf, "r");
-	if (!cert_file) {
-		printf("Could not open file for cert request.\n");
+	// generate a rsa key pair
+	if (!(p_key = generate_key(uname))) {
+		fprintf(stderr, "Could not generate RSA keys.\n");
+		exit(1);
 	}
 
-	char cert_buf[2000];
-	fread(cert_buf, sizeof(cert_buf), 1, cert_file);
-	printf(cert_buf);
+	// create a certificate request using newly created rsa_key_pair
+	generate_cert_req(p_key, uname, &cert_size);
+	char cert_buf[cert_size + 1];
+	get_x509_req_as_str(uname, cert_buf, cert_size);
 
+	// format content to sent to server
 	sprintf(content_buf, "%s\n%s\n", uname, pass);
-	sprintf(obuf, "POST /getcert HTTP/1.0\nContent-Length:%lu\n%s\n%s\n",
+	sprintf(obuf, "POST /getcert HTTP/1.0\nContent-Length: %lu\n\n%s",
 			strlen(content_buf) + cert_size, content_buf);
 
-	printf("%s\n", obuf);
-
+	// Prvoide content to server
 	SSL_write(ssl, obuf, strlen(obuf));
 	SSL_write(ssl, cert_buf, cert_size);
-	
+
+	// Get server response 	
+	fprintf(stdout, "\nSERVER RESPONSE:\n");
 	while ((ilen = SSL_read(ssl, ibuf, sizeof ibuf - 1)) > 0) {
 		ibuf[ilen] = '\0';
 		fprintf(stdout, "%s", ibuf);
 	}
 
+	// Clean Up
+	EVP_PKEY_free(p_key);
 	SSL_shutdown(ssl);
 	SSL_free(ssl);
 	close(sock);
@@ -181,100 +182,133 @@ void print_usage_information() {
 }
 
 
-X509_REQ *generate_cert_req(EVP_PKEY *p_key, char *username, int *size) {
-    X509_REQ *p_x509_req = NULL;
+/**
+ * Generate a certificate request.
+ */
+X509_REQ* generate_cert_req(EVP_PKEY *p_key, char *username, int *size) {
+	X509_REQ *p_x509_req = NULL;
 
-    if (p_key == NULL) {
-        printf("No EVP_PKEY provided\n");
-    }
+	if (p_key == NULL) {
+		printf("No EVP_PKEY provided\n");
+	}
 
-    if ((p_x509_req = X509_REQ_new()) == NULL) {
-        printf("Failed to create a new X509 REQ\n");
-        goto CLEANUP;
-    }
+	if ((p_x509_req = X509_REQ_new()) == NULL) {
+		printf("Failed to create a new X509 REQ\n");
+		goto CLEANUP;
+	}
 
-    if (X509_REQ_set_pubkey(p_x509_req, p_key) < 0) {
-        printf("failed to set pubic key\n");
-        X509_REQ_free(p_x509_req);
-        p_x509_req = NULL;
-        goto CLEANUP;
-    }
+	if (X509_REQ_set_pubkey(p_x509_req, p_key) < 0) {
+		printf("Failed to set pubic key\n");
+		X509_REQ_free(p_x509_req);
+		p_x509_req = NULL;
+		goto CLEANUP;
+	}
 
-    if (0 > X509_REQ_sign(p_x509_req, p_key, EVP_sha256())) {
-        printf("failed to sign the certificate\n");
-        X509_REQ_free(p_x509_req);
-        p_x509_req = NULL;
-        goto CLEANUP;
-    }
+	if (0 > X509_REQ_sign(p_x509_req, p_key, EVP_sha256())) {
+		printf("Failed to sign the X509 REQ.\n");
+		X509_REQ_free(p_x509_req);
+		p_x509_req = NULL;
+		goto CLEANUP;
+	}
 
-    CLEANUP:
-    EVP_PKEY_free(p_key);
+	CLEANUP: EVP_PKEY_free(p_key);
+
+	// -- Save X509 REQ to a file, saving the size of content written -- 
 
 	char path_buf[100];
-	snprintf(path_buf, sizeof(path_buf), "./client-dir/%s/cert_req.pem", username);
+	snprintf(path_buf, sizeof(path_buf), "./client-dir/%s/cert_req.pem",
+			username);
 
 	FILE *x509_file = fopen(path_buf, "wb");
-    if(!x509_file) {
-        printf("Unable to open cert req file for writing.\n");
-        return NULL;
-    }
-    
-    /* Write the certificate to disk. */
-    int ret = PEM_write_X509_REQ(x509_file, p_x509_req);
-    fclose(x509_file);
+	if (!x509_file) {
+		printf("Unable to open CSR file for writing.\n");
+		X509_REQ_free(p_x509_req);
+		return NULL;
+	}
+
+	int ret;
+	if (!(ret = PEM_write_X509_REQ(x509_file, p_x509_req))) {
+		printf("Attempt to save X509 REQ to file failed.\n");
+	}
+	fclose(x509_file);
 
 	struct stat st;
 	stat(path_buf, &st);
 	*size = st.st_size;
 
-    return p_x509_req;
+	return p_x509_req;
 }
 
-/* Generates a 2048-bit RSA key. */
-EVP_PKEY *generate_key(char *username) {
-    /* Allocate memory for the EVP_PKEY structure. */
-    // EVP_PKEY *pkey = EVP_PKEY_new();
-    // if(!pkey) {
-    //     printf("Unable to create EVP_PKEY structure.\n");
-    //     return NULL;
-    // }
-    
+/**
+ * Opens a newly created X509 REQ file into a string. Once read,
+ * deletes the CSR file, as it is no longer needed.
+ */
+void get_x509_req_as_str(char *uname, char *x509_buf, size_t buf_size) {
+
+	// Open the newly saved cert_req.pm file, as char *
+	char path_buf[100];
+	snprintf(path_buf, sizeof(path_buf), "./client-dir/%s/cert_req.pem", uname);
+	FILE *cert_file = fopen(path_buf, "r");
+	if (!cert_file) {
+		printf("Could not open file for cert request.\n");
+		return;
+	}
+
+	size_t content = fread(x509_buf, 1, buf_size - 1, cert_file);
+	x509_buf[content] = '\0';
+
+	fclose(cert_file);
+	printf("READ CSR FROM FILE:\n%s\n", x509_buf);
+
+	// delete the request now that we've read and are done with it
+	int del = remove(path_buf);
+	if (del != 0)
+		printf("CSR file was not successfully removed.\n");
+	return;
+}
+
+/**
+ * Generate a 2048-bit RSA key and save to a file
+ * under the specified username.
+ */
+EVP_PKEY* generate_key(char *username) {
+
+	// --- create the RSA KEY ----
 	EVP_PKEY_CTX *ctx;
 	EVP_PKEY *pkey = NULL;
- 	ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, NULL);
-	 if (!ctx) {
+	ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, NULL);
+	if (!ctx) {
+		fprintf(stderr, "Could not create EVP_PKEY_ctx.\n");
+		return NULL;
+	}
+	if (EVP_PKEY_keygen_init(ctx) <= 0) {
+		fprintf(stderr, "Could not initialize public key algorithm context.\n");
+		return NULL;
+	}
+	if (EVP_PKEY_CTX_set_rsa_keygen_bits(ctx, 2048) <= 0) {
+		fprintf(stderr, "Could not set the RSA key length for RSA key generation.\n");
+		return NULL;
+	}
+	if (EVP_PKEY_keygen(ctx, &pkey) <= 0) {
+		fprintf(stderr, "Could not perform key generation operation.\n");
+		return NULL;
+	}
 
-	 }
- 	if (EVP_PKEY_keygen_init(ctx) <= 0){
-		 
-	 }
- 	if (EVP_PKEY_CTX_set_rsa_keygen_bits(ctx, 2048) <= 0) {
+	// --- Save the RSA key to file ----
 
-	 }
- 	if (EVP_PKEY_keygen(ctx, &pkey) <= 0){
-		 
-	 }
-
-    /* Generate the RSA key and assign it to pkey. */
-	// RSA *rsa = RSA_new();
-    // RSA *rsa = RSA_generate_key(2048, RSA_F4, NULL, NULL);
-    // if (!EVP_PKEY_assign_RSA(pkey, rsa)) {
-	// 	printf("Unable to generate RSA key\n.");
-    //     EVP_PKEY_free(pkey);
-    //     return NULL;
-    // }
-	
 	char path_buf[100];
 	snprintf(path_buf, sizeof(path_buf), "client-dir/%s/private.key", username);
 
-	printf("%s\n", path_buf);
-
-	FILE* pkey_file = fopen(path_buf, "wb");
+	FILE *pkey_file = fopen(path_buf, "wb");
 	if (!pkey_file) {
-		printf("Could not open file for private key.\n");
+		printf("Could not open and write private key to file.\n");
+		EVP_PKEY_free(pkey);
+		return NULL;
 	}
 
 	PEM_write_PrivateKey(pkey_file, pkey, NULL, NULL, 0, NULL, NULL);
-	fclose(pkey_file);	
-    return pkey;
+	fclose(pkey_file);
+
+	// --- Return the private key ----	
+	return pkey;
 }
