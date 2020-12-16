@@ -12,7 +12,8 @@ else
 
     mkdir client-dir
     mkdir rootca-dir
-    mkdir -p server-dir/ca server-dir/passwords
+    mkdir -p client-dir/trusted_ca client-dir/bin
+    mkdir -p server-dir/ca server-dir/passwords server-dir/bin
 
 fi
 
@@ -20,7 +21,7 @@ fi
 input=("addleness" "analects" "annalistic" "anthropomorphologically" "blepharosphincterectomy" "corector" "durwaun" "dysphasia" "encampment" "endoscopic" "exilic" "forfend" "gorbellied" "gushiness" "muermo" "neckar" "outmate" "outroll" "overrich" "philosophicotheological" "pockwood" "polypose" "refluxed" "reinsure" "repine" "scerne" "starshine" "unauthoritativeness" "unminced" "unrosed" "untranquil" "urushinic" "vegetocarbonaceous" "wamara" "whaledom")
 for i in ${input[@]}
 do 
-    (umask 077; mkdir -p client-dir/$i)
+    (umask 077; mkdir -p client-dir/mailboxes/$i)
     (umask 077; mkdir -p server-dir/mailboxes/$i)
 done
 
@@ -31,3 +32,7 @@ do
   ((j++))
 done < ../original_hashed_pass.txt
 
+
+# Moves executables into the correct directory
+cp ../bin/server ./server-dir/bin/server
+cp ../bin/getcert ./client-dir/bin/getcert

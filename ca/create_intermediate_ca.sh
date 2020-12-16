@@ -54,9 +54,11 @@ openssl req -config intermediate_ca.cnf -new \
 # -md (the message digest to use, algorithm)
 # -in (A file containing a single certificate request to be signed by the CA)
 # -out (specify the outfile file for certificate)
+# -batch (No questions asked, certificate generated automatically)
 
 echo "Attempting to create intermediate CA certificate using root CA"
 openssl ca -config ../../rootca-dir/root_ca.cnf -extensions v3_intermediate_ca \
+	-key pass -batch \
 	-days 500 -notext -md sha256 \
 	-in ./csr/intermediate.csr.pem \
 	-out ./certs/intermediate.cert.pem
@@ -65,22 +67,21 @@ chmod 444 ./certs/intermediate.cert.pem
 
 # 5. Verify the intermediate certificate
 # Same as with the root certificate, see details.
-
-echo "Verifying intermediate certificate"
-openssl x509 -noout -text -in ./certs/intermediate.cert.pem
+# echo "Verifying intermediate certificate"
+# openssl x509 -noout -text -in ./certs/intermediate.cert.pem
 
 # 6. Verify that the chain of trust is intact
 # It should say OK.
-
 echo "Verifying intermediate CA certificate against root CA certificate - it should say OK"
 openssl verify -CAfile ../../rootca-dir/certs/ca.cert.pem ./certs/intermediate.cert.pem
 
 # 7. Complete Certificate chain
 # In order to applications to be able to verify the intermediate cert against root, need to add CA certificate chain
 # by concatenating the intermediate and root certificates together.
-
 cat ./certs/intermediate.cert.pem ../../rootca-dir/certs/ca.cert.pem > ./certs/ca-chain.cert.pem
-
 chmod 444 ./certs/ca-chain.cert.pem
+
+# Copy trusted CA to client side as well, as this will be needed in client program
+cp ./certs/ca-chain.cert.pem ../../client-dir/trusted_ca/ca-chain.cert.pem
 
 echo -e "\nFinished creating Intermediate CA!"

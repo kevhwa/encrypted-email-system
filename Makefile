@@ -1,9 +1,12 @@
 CC = gcc
 CFLAGS = -g -Wall -std=c11
 LDFLAGS = -g
-LDLIBS = -lssl -lcrypto -lcrypt #needs to be added if using linux
+LDLIBS = -lssl -lcrypto -lcrypt # needs to be added if using linux
 
-.PHONY: all clean
+.PHONY: all clean install
+
+install: clean all
+	./bin/install.sh $(DEST)
 
 all: bin/getcert bin/server
 

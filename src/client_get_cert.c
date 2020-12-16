@@ -18,6 +18,7 @@
 #include "user_io.h"
 
 #define h_addr h_addr_list[0] /* for backward compatibility */
+#define TRUSTED_CA "trusted_ca/ca-chain.cert.pem"
 
 int tcp_connection(char *host_name, int port);
 void print_usage_information();
@@ -45,7 +46,7 @@ int main(int argc, char **argv) {
 
 	// create the SSL context; note that no certificate
 	// and private key are provided; this will run with username/password
-	ctx = create_ctx_client(NULL, NULL, 0);
+	ctx = create_ctx_client(NULL, NULL, TRUSTED_CA, 0);
 
 	// create the TCP socket
 	if ((sock = tcp_connection("localhost", 8080)) < 0) {
@@ -135,8 +136,8 @@ int main(int argc, char **argv) {
 
 	fprintf(stdout, "\nSERVER RESPONSE:\n");
 	err = SSL_read(ssl, response_buf, sizeof(response_buf) - 1);
-	printf("server said: %s\n", response_buf);
 	response_buf[err] = '\0';
+	printf("server wrote %d bytes:\n%s\n", err, response_buf);
 
 	if (strstr(response_buf, "200 Success")) {
 		printf("Success!\n");
@@ -147,7 +148,7 @@ int main(int argc, char **argv) {
 
 		printf("Certificate:\n%s\n", cert_buf);
 		char path_buf[100];
-		snprintf(path_buf, sizeof(path_buf), "client-dir/%s/%s.cert.pem", uname,
+		snprintf(path_buf, sizeof(path_buf), "mailboxes/%s/%s.cert.pem", uname,
 				uname);
 		if (!write_x509_cert_to_file(cert_buf, path_buf)) {
 			printf("Could not save newly generated certificate to a local file.\n");
@@ -281,7 +282,7 @@ X509_REQ* generate_cert_req(EVP_PKEY *p_key, char *username, int *size) {
 
 	// -- Save X509 REQ to a file, saving the size of content written -- //
 	char path_buf[100];
-	snprintf(path_buf, sizeof(path_buf), "./client-dir/%s/cert_req.pem",
+	snprintf(path_buf, sizeof(path_buf), "mailboxes/%s/cert_req.pem",
 			username);
 	*size = write_x509_req_to_file(p_x509_req, path_buf);
 	return p_x509_req;
@@ -323,7 +324,7 @@ void read_x509_req_from_file(char *uname, char *x509_buf, size_t buf_size) {
 
 	// Open the newly saved cert_req.pm file, as char *
 	char path_buf[100];
-	snprintf(path_buf, sizeof(path_buf), "./client-dir/%s/cert_req.pem", uname);
+	snprintf(path_buf, sizeof(path_buf), "mailboxes/%s/cert_req.pem", uname);
 	FILE *cert_file = fopen(path_buf, "rb+");
 	if (!cert_file) {
 		printf("Could not open file for cert request.\n");
@@ -372,7 +373,7 @@ EVP_PKEY* generate_key(char *username) {
 
 	// --- Save the RSA key to file ----
 	char path_buf[100];
-	snprintf(path_buf, sizeof(path_buf), "client-dir/%s/private.key", username);
+	snprintf(path_buf, sizeof(path_buf), "mailboxes/%s/private.key", username);
 
 	FILE *pkey_file = fopen(path_buf, "wb");
 	if (!pkey_file) {
