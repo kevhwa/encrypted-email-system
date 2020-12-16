@@ -83,4 +83,8 @@ cat ./certs/intermediate.cert.pem ../../rootca-dir/certs/ca.cert.pem > ./certs/c
 
 chmod 444 ./certs/ca-chain.cert.pem
 
+# Copy trusted CA to client side as well, as this will be needed in client program
+
+cp ./certs/ca-chain.cert.pem ../../client-dir/trusted_ca/ca-chain.cert.pem
+
 echo -e "\nFinished creating Intermediate CA!"

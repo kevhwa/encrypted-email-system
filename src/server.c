@@ -8,7 +8,7 @@
 #include <openssl/bio.h>
 #include <openssl/err.h>
 #include <ctype.h>
-#include <crypt.h>  // use if using a linux machine
+// #include <crypt.h>  // use if using a linux machine
 
 #include "create_ctx.h"
 #include "server.h"
@@ -18,6 +18,9 @@
 #define OFF 0
 #define BAD_REQUEST 400
 #define NOT_FOUND 404
+#define CERTIFICATE_FILE "ca/certs/ca-chain.cert.pem"
+#define TRUSTED_CA_FILE "ca/certs/intermediate.cert.pem"
+#define PRIVATE_KEY_FILE "ca/private/intermediate.key.pem"
 
 const char *bad_request_resp = "HTTP/1.0 400 Bad Request\nContent-Length: 0\n\n";
 const char *not_found_resp = "HTTP/1.0 404 Not Found\nContent-Length: 0\n\n";
@@ -49,7 +52,7 @@ int main(int argc, char **argv) {
 	int verify_client = OFF;
 
 	// create the SSL context
-	ctx = create_ctx_server(NULL, NULL, 0);
+	ctx = create_ctx_server(CERTIFICATE_FILE, PRIVATE_KEY_FILE, NULL, 0);
 
 	// create the TCP socket
 	if ((sock = tcp_listen()) < 0) {
@@ -164,7 +167,7 @@ int main(int argc, char **argv) {
 		// ------------ Save CSR to a CSR file   ----- //
 		char path[100];
 		X509_REQ *x509_req;
-		snprintf(path, sizeof(path), "server-dir/mailboxes/%s/%s.csr.pem",
+		snprintf(path, sizeof(path), "mailboxes/%s/%s.csr.pem",
 				uname_buf, uname_buf);
 
 		if (!write_x509_req_to_file(cert_buf, uname_buf, path)) {
@@ -178,9 +181,7 @@ int main(int argc, char **argv) {
 			goto CLEANUP;
 		}
 
-		int res = generate_cert(x509_req,
-				"server-dir/ca/certs/ca-chain.cert.pem",
-				"server-dir/ca/private/intermediate.key.pem", uname_buf);
+		int res = generate_cert(x509_req, CERTIFICATE_FILE, PRIVATE_KEY_FILE, uname_buf);
 		if (res <= 0) {
 			err = SSL_write(ssl, internal_error_resp, strlen(internal_error_resp));
 			printf("error within generate cert\n");
@@ -191,8 +192,7 @@ int main(int argc, char **argv) {
 		char read_certbuf[4096];
 		char tmp_buf[100];
 		int read_len = 0;
-		snprintf(tmp_buf, sizeof(tmp_buf),
-				"server-dir/mailboxes/%s/%s.cert.pem", uname_buf, uname_buf);
+		snprintf(tmp_buf, sizeof(tmp_buf), "mailboxes/%s/%s.cert.pem", uname_buf, uname_buf);
 
 		if ((read_len = read_x509_cert_from_file(read_certbuf,
 				sizeof(read_certbuf), tmp_buf)) == 0) {
@@ -436,7 +436,7 @@ int generate_cert(X509_REQ *x509_req, const char *p_ca_path,
 	// ---- Save X509 certificate as a file on the server ----
 
 	char path_buf[100];
-	snprintf(path_buf, sizeof(path_buf), "server-dir/mailboxes/%s/%s.cert.pem",
+	snprintf(path_buf, sizeof(path_buf), "mailboxes/%s/%s.cert.pem",
 			uname, uname);
 	if (write_x509_cert_to_file(p_generated_cert, path_buf)) {
 		success = 1;
@@ -554,7 +554,7 @@ int check_credential(char *username, char *submitted_password) {
 
 	// open file for username
 	char path_buf[100];
-	snprintf(path_buf, sizeof(path_buf), "./server-dir/passwords/%s.txt", username);
+	snprintf(path_buf, sizeof(path_buf), "passwords/%s.txt", username);
 	FILE *pw_file = fopen(path_buf, "r");
 	if (!pw_file) {
 		printf("Could not open file containing hashed password for user.\n");
