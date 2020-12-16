@@ -23,8 +23,10 @@ int tcp_connection(char *host_name, int port);
 void print_usage_information();
 EVP_PKEY *generate_key(char *username);
 X509_REQ *generate_cert_req(EVP_PKEY *p_key, char *username, int *size);
-void get_x509_req_as_str(char *uname, char *x509_buf, size_t buf_size);
-int write_x509_to_file(char *x509, char *path);
+void read_x509_req_from_file(char *uname, char *x509_buf, size_t buf_size);
+int write_x509_req_to_file(X509_REQ *p_x509_req, char *path);
+int write_x509_cert_to_file(char *x509, char *path);
+
 
 int main(int argc, char **argv) {
 	int err;
@@ -105,22 +107,25 @@ int main(int argc, char **argv) {
 	int cert_size = 0;
 	EVP_PKEY *p_key;
 
-	// generate key pair
 	if (!(p_key = generate_key(uname))) {
 		fprintf(stderr, "Could not generate RSA keys.\n");
 		exit(1);
 	}
 
-	// generate CSR
+	// ------------ Generate CSR ------------- //
 	generate_cert_req(p_key, uname, &cert_size);
+	if (!cert_size) {
+		fprintf(stderr, "Could not generate X509 certificate REQ.\n");
+		EVP_PKEY_free(p_key);
+		exit(1);
+	}
 	char cert_buf[cert_size + 1];
-	get_x509_req_as_str(uname, cert_buf, cert_size);
+	read_x509_req_from_file(uname, cert_buf, cert_size);
 
 	// -------- Provide content to server -------- //
-	// format content to sent to server
 	sprintf(content_buf, "%s\n%s\n", uname, pass);
 	sprintf(obuf, "POST /getcert HTTP/1.0\nContent-Length: %lu\n\n%s",
-	strlen(content_buf) + cert_size, content_buf);
+			strlen(content_buf) + cert_size, content_buf);
 
 	SSL_write(ssl, obuf, strlen(obuf));
 	SSL_write(ssl, cert_buf, cert_size);
@@ -135,22 +140,23 @@ int main(int argc, char **argv) {
 
 	if (strstr(response_buf, "200 Success")) {
 		printf("Success!\n");
-		
+
 		char cert_buf[4096];
 		err = SSL_read(ssl, cert_buf, sizeof(cert_buf) - 1);
 		cert_buf[err] = '\0';
 
 		printf("Certificate:\n%s\n", cert_buf);
 		char path_buf[100];
-		snprintf(path_buf, sizeof(path_buf), "client-dir/%s/%s.cert.pem", uname, uname);
-		if (!write_x509_to_file(cert_buf, path_buf)) {
+		snprintf(path_buf, sizeof(path_buf), "client-dir/%s/%s.cert.pem", uname,
+				uname);
+		if (!write_x509_cert_to_file(cert_buf, path_buf)) {
 			printf("Could not save newly generated certificate to a local file.\n");
 		}
 
 	} else {
 		printf("Sorry, your certificate could not be generated.\n");
 	}
-	
+
 	// ------- Clean Up -------- //
 	EVP_PKEY_free(p_key);
 	SSL_shutdown(ssl);
@@ -163,7 +169,7 @@ int main(int argc, char **argv) {
  * Wrties a X509 Certificate to file.
  * Certificate should be string, not a X509 struct.
  */
-int write_x509_to_file(char *x509, char *path) {
+int write_x509_cert_to_file(char *x509, char *path) {
 	
 	FILE *p_file = NULL;
 	if (!(p_file = fopen(path, "wb+"))) {
@@ -228,16 +234,19 @@ void print_usage_information() {
  */
 X509_REQ* generate_cert_req(EVP_PKEY *p_key, char *username, int *size) {
 	X509_REQ *p_x509_req = NULL;
+	X509_NAME *name = NULL;
 
 	if (p_key == NULL) {
 		printf("No EVP_PKEY provided\n");
 	}
 
+	// create new X509 REQ
 	if ((p_x509_req = X509_REQ_new()) == NULL) {
 		printf("Failed to create a new X509 REQ\n");
 		goto CLEANUP;
 	}
 
+	// set the public key on the REQ
 	if (X509_REQ_set_pubkey(p_x509_req, p_key) < 0) {
 		printf("Failed to set pubic key\n");
 		X509_REQ_free(p_x509_req);
@@ -245,11 +254,22 @@ X509_REQ* generate_cert_req(EVP_PKEY *p_key, char *username, int *size) {
 		goto CLEANUP;
 	}
 
-	X509_NAME *name = X509_REQ_get_subject_name(p_x509_req);
-	X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC, (const unsigned char *) username, -1, -1, 0);
-	X509_NAME_add_entry_by_txt(name, "O", MBSTRING_ASC, (const unsigned char *) "A Really Cool Organization", -1, -1, 0);
-	X509_NAME_add_entry_by_txt(name, "C", MBSTRING_ASC, (const unsigned char *) "US", -1, -1, 0);
+	// add information about the client to the CSR
+	if ((name = X509_REQ_get_subject_name(p_x509_req)) == NULL) {
+		printf("Failed to get subject name from REQ\n");
+		X509_REQ_free(p_x509_req);
+		p_x509_req = NULL;
+		goto CLEANUP;
+	}
 
+	X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC,
+			(const unsigned char*) username, -1, -1, 0);
+	X509_NAME_add_entry_by_txt(name, "O", MBSTRING_ASC,
+			(const unsigned char*) "A Really Cool Organization", -1, -1, 0);
+	X509_NAME_add_entry_by_txt(name, "C", MBSTRING_ASC,
+			(const unsigned char*) "US", -1, -1, 0);
+
+	// Sign the REQ
 	if (X509_REQ_sign(p_x509_req, p_key, EVP_sha256()) < 0) {
 		printf("Failed to sign the X509 REQ.\n");
 		X509_REQ_free(p_x509_req);
@@ -260,41 +280,51 @@ X509_REQ* generate_cert_req(EVP_PKEY *p_key, char *username, int *size) {
 	CLEANUP: EVP_PKEY_free(p_key);
 
 	// -- Save X509 REQ to a file, saving the size of content written -- //
-
 	char path_buf[100];
 	snprintf(path_buf, sizeof(path_buf), "./client-dir/%s/cert_req.pem",
 			username);
+	*size = write_x509_req_to_file(p_x509_req, path_buf);
+	return p_x509_req;
+}
 
-	FILE *x509_file = fopen(path_buf, "wb");
+/**
+ * Saves X509 REQ to file, returns the number of bytes in the written REQ.
+ */
+int write_x509_req_to_file(X509_REQ *p_x509_req, char *path) {
+
+	if (!p_x509_req) {
+		return 0;
+	}
+
+	FILE *x509_file = fopen(path, "wb");
 	if (!x509_file) {
 		printf("Unable to open CSR file for writing.\n");
 		X509_REQ_free(p_x509_req);
-		return NULL;
+		return 0;
 	}
 
 	int ret;
 	if (!(ret = PEM_write_X509_REQ(x509_file, p_x509_req))) {
 		printf("Attempt to save X509 REQ to file failed.\n");
+		return 0;
 	}
 	fclose(x509_file);
 
 	struct stat st;
-	stat(path_buf, &st);
-	*size = st.st_size;
-
-	return p_x509_req;
+	stat(path, &st);
+	return st.st_size;
 }
 
 /**
  * Opens a newly created X509 REQ file into a string. Once read,
  * deletes the CSR file, as it is no longer needed.
  */
-void get_x509_req_as_str(char *uname, char *x509_buf, size_t buf_size) {
+void read_x509_req_from_file(char *uname, char *x509_buf, size_t buf_size) {
 
 	// Open the newly saved cert_req.pm file, as char *
 	char path_buf[100];
 	snprintf(path_buf, sizeof(path_buf), "./client-dir/%s/cert_req.pem", uname);
-	FILE *cert_file = fopen(path_buf, "r");
+	FILE *cert_file = fopen(path_buf, "rb+");
 	if (!cert_file) {
 		printf("Could not open file for cert request.\n");
 		return;

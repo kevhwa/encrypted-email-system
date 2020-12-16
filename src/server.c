@@ -23,6 +23,7 @@ const char *bad_request_resp = "HTTP/1.0 400 Bad Request\nContent-Length: 0\n\n"
 const char *not_found_resp = "HTTP/1.0 404 Not Found\nContent-Length: 0\n\n";
 const char *unauthorized_resp = "HTTP/1.0 401 Unauthorized\nContent-Length: 0\n\n";
 const char *internal_error_resp = "HTTP/1.0 500 Internal Server Error\nContent-Length: 0\n\n";
+const char *success_template = "HTTP/1.0 200 Success\nContent-Length: %d\n\n";
 
 int tcp_listen();
 RequestHandler* init_request_handler();
@@ -30,12 +31,13 @@ void free_request_handler(RequestHandler *request_handler);
 int check_credential(char *username, char *submitted_password);
 int parse_credentials_from_request_body(char *request_body, char uname[],
 		char pwd[], int buf_len);
-int generate_cert(X509_REQ *req, const char *p_ca_path, const char *p_ca_key_path, const char *uname);
-X509_REQ *read_x509_req_from_file(char *uname, char *path);
+int generate_cert(X509_REQ *req, const char *p_ca_path,
+		const char *p_ca_key_path, const char *uname);
+X509_REQ* read_x509_req_from_file(char *uname, char *path);
 int write_x509_req_to_file(char *csr, char *uname, char *path);
 int write_x509_cert_to_file(X509 *cert, char *path);
 int read_x509_cert_from_file(char *cert_buf, int size, char *path);
-int randSerial(ASN1_INTEGER *ai);
+int rand_serial(ASN1_INTEGER *ai);
 
 int main(int argc, char **argv) {
 	int err;
@@ -120,7 +122,8 @@ int main(int argc, char **argv) {
 		char buf[4096];
 		err = SSL_read(ssl, buf, sizeof(buf) - 1);
 		buf[err] = '\0';
-		fprintf(stdout, "Received %d chars of content:\n---\n%s----\n", err, buf);
+		fprintf(stdout, "Received %d chars of content:\n---\n%s----\n", err,
+				buf);
 
 		// --- Validate request and send resp back to the SSL client ---
 		int max_auth_len = 20;
@@ -137,271 +140,80 @@ int main(int argc, char **argv) {
 		} else if (request_handler->status_code == NOT_FOUND) {
 			err = SSL_write(ssl, not_found_resp, strlen(not_found_resp));
 			goto CLEANUP;
-		} 
+		}
 
 		if (parse_credentials_from_request_body(
-			request_handler->request_content, uname_buf, pwd_buf, max_auth_len) < 0) {
-				err = SSL_write(ssl, bad_request_resp, strlen(bad_request_resp));
+				request_handler->request_content, uname_buf, pwd_buf,
+				max_auth_len) < 0) {
+			err = SSL_write(ssl, bad_request_resp, strlen(bad_request_resp));
 			goto CLEANUP;
-		} 
-		
+		}
+
 		if (!check_credential(uname_buf, pwd_buf)) {
 			printf("Authentication failed.\n");
 			err = SSL_write(ssl, unauthorized_resp, strlen(unauthorized_resp));
 			goto CLEANUP;
 		}
 
-		// --- Passed authentication. Read in certificate request ---/
-
+		// --- Passed authentication. Read in certificate request --- //
 		char cert_buf[4096];
 		int temp = SSL_read(ssl, cert_buf, sizeof(cert_buf) - 1);
 		cert_buf[temp] = '\0';
 		fprintf(stdout, "\nCSR Received:\n%s\n", cert_buf);
 
-		// ----- save CSR to a csr file in plaintext -----
+		// ------------ Save CSR to a CSR file   ----- //
 		char path[100];
 		X509_REQ *x509_req;
-		snprintf(path, sizeof(path), "server-dir/mailboxes/%s/%s.csr.pem", uname_buf, uname_buf);
-		
+		snprintf(path, sizeof(path), "server-dir/mailboxes/%s/%s.csr.pem",
+				uname_buf, uname_buf);
+
 		if (!write_x509_req_to_file(cert_buf, uname_buf, path)) {
 			printf("failed to write csr to file");
 			goto CLEANUP;
 		}
-		
-		// ----- Read in the CSR as a CSR object -----
+
+		// ----- Read in the CSR as a CSR object ----- //
 		if (!(x509_req = read_x509_req_from_file(uname_buf, path))) {
 			printf("failed to read csr from file");
 			goto CLEANUP;
-		}	
+		}
 
-		int res = generate_cert(x509_req, "server-dir/ca/certs/ca-chain.cert.pem", "server-dir/ca/private/intermediate.key.pem", uname_buf);
+		int res = generate_cert(x509_req,
+				"server-dir/ca/certs/ca-chain.cert.pem",
+				"server-dir/ca/private/intermediate.key.pem", uname_buf);
 		if (res <= 0) {
 			err = SSL_write(ssl, internal_error_resp, strlen(internal_error_resp));
-			printf ("error within generate cert\n");
+			printf("error within generate cert\n");
 			goto CLEANUP;
 		}
 
-		// --- Read certificate and send to user ---/
+		// --- Read certificate and send to user ---//
 		char read_certbuf[4096];
 		char tmp_buf[100];
 		int read_len = 0;
-		snprintf(tmp_buf, sizeof(tmp_buf), "server-dir/mailboxes/%s/%s.cert.pem", uname_buf, uname_buf);
+		snprintf(tmp_buf, sizeof(tmp_buf),
+				"server-dir/mailboxes/%s/%s.cert.pem", uname_buf, uname_buf);
 
-		if ((read_len = read_x509_cert_from_file(read_certbuf, sizeof(read_certbuf), tmp_buf)) == 0) {
+		if ((read_len = read_x509_cert_from_file(read_certbuf,
+				sizeof(read_certbuf), tmp_buf)) == 0) {
+
 			err = SSL_write(ssl, internal_error_resp, strlen(internal_error_resp));
 			goto CLEANUP;
 		}
 
 		char content_buf[4096];
-		sprintf(content_buf, "HTTP/1.0 200 Success\nContent-Length: %d\n", read_len);
+		sprintf(content_buf, success_template, read_len);
 
 		err = SSL_write(ssl, content_buf, strlen(content_buf));
 		err = SSL_write(ssl, read_certbuf, read_len);
-		
-		CLEANUP:
-		SSL_shutdown(ssl);
+
+		CLEANUP: SSL_shutdown(ssl);
 		SSL_free(ssl);
 		close(rqst);
 		free_request_handler(request_handler);
 	}
 	close(sock);
 	SSL_CTX_free(ctx);
-}
-
-/**
- * Writes a X509 REQ to a file. REQ in form of char *, not X509_REQ.
- */
-int write_x509_req_to_file(char *csr, char *uname, char *path) {
-	
-	FILE *fp;
-	if (!(fp = fopen(path, "wb+" ))) {
-		printf("Could not open file to write CSR\n");
-		return 0;
-	}
-	fwrite(csr, 1, strlen(csr), fp);
-	fclose(fp);
-
-	return 1;
-}
-
-/**
- * Reads X509_REQ from a file containing the REQ.
- */
-X509_REQ *read_x509_req_from_file(char *uname, char *path) {
-	
-	FILE *fp;
-	if (!(fp = fopen(path, "rb+" ))) {
-		printf("Could not open file to read CSR\n");
-		return NULL;
-	}
-	X509_REQ *x509_req = PEM_read_X509_REQ(fp, NULL, 0, NULL);
-	fclose(fp);
-
-	return x509_req;
-}
-
-/**
- * Saves a X509 certificate to a file.
- */
-int write_x509_cert_to_file(X509 *cert, char *path) {
-
-    FILE *p_file = NULL;
-    if (NULL == (p_file = fopen(path, "wb+"))) {
-        printf("Failed to open file for saving csr\n");
-        return 0;
-    }
-
-    PEM_write_X509(p_file, cert);
-    fclose(p_file);
-	return 1;
-}
-
-/**
- * Reads a X509 certificate from file into cert_buf 
- * (does not read in as a X509).
- */
-int read_x509_cert_from_file(char *cert_buf, int size, char *path) {
-
-	FILE *fp;
-	if (!(fp = fopen(path, "rb+" ))) {
-		printf("Could not open file to read certificate\n");
-		return 0;
-	}
-
-	int read = fread(cert_buf, 1, size, fp);
-	printf ("server - read in %d\n", read);
-	fclose(fp);
-
-	return read;
-}
-
-int randSerial(ASN1_INTEGER *ai) {
-    BIGNUM *p_bignum = NULL;
-    int ret = -1;
-
-    if (NULL == (p_bignum = BN_new())) {
-        goto CLEANUP;
-    }
-
-    if (!BN_pseudo_rand(p_bignum, 64, 0, 0)) {
-        goto CLEANUP;
-    }
-
-    if (ai && !BN_to_ASN1_INTEGER(p_bignum, ai)) {
-        goto CLEANUP;
-    }
-
-    ret = 1;
-
-    CLEANUP:
-    BN_free(p_bignum);
-
-    return ret;
-}
-
-int generate_cert(X509_REQ *x509_req, const char *p_ca_path, const char *p_ca_key_path, const char *uname) {
-    FILE *p_ca_file = NULL;
-    X509 *p_ca_cert = NULL;
-    EVP_PKEY *p_ca_pkey = NULL;
-    FILE *p_ca_key_file = NULL;
-    EVP_PKEY *p_ca_key_pkey = NULL;
-    X509 *p_generated_cert = NULL;
-    ASN1_INTEGER *p_serial_number = NULL;
-    EVP_PKEY *p_cert_req_pkey = NULL;
-	int success = 0;
-
-	// ---- read-in CA information ----
-
-    if ((p_ca_file = fopen(p_ca_path, "r")) == NULL) {
-        printf("Failed to open the CA certificate file\n");
-        goto CLEANUP;
-    }
-
-    if (!(p_ca_cert = PEM_read_X509(p_ca_file, NULL, 0, NULL))) {
-        printf("Failed to read X509 CA certificate\n");
-        goto CLEANUP;
-    }
-
-    if (!(p_ca_pkey = X509_get_pubkey(p_ca_cert))) {
-        printf("Failed to get X509 CA pkey\n");
-        goto CLEANUP;
-    }
-
-    if (!(p_ca_key_file = fopen(p_ca_key_path, "r"))) {
-        printf("Failed to open the private key file\n");
-        goto CLEANUP;
-    }
-
-    if (!(p_ca_key_pkey = PEM_read_PrivateKey(p_ca_key_file, NULL, NULL, NULL))) {
-        printf("Failed to read the private key file\n");
-        goto CLEANUP;
-    }
-
-	// ---- Create a new X509 certificate ----
-
-    if (!(p_generated_cert = X509_new())) {
-        printf("Failed to allocate a new X509\n");
-        goto CLEANUP;
-    }
-
-
-    p_serial_number = ASN1_INTEGER_new();
-    randSerial(p_serial_number);
-    X509_set_serialNumber(p_generated_cert, p_serial_number);
-
-	X509_set_issuer_name(p_generated_cert, X509_get_subject_name(p_ca_cert));
-    X509_set_subject_name(p_generated_cert, X509_REQ_get_subject_name(x509_req));
-
-    X509_gmtime_adj(X509_get_notBefore(p_generated_cert), 0L);
-    X509_gmtime_adj(X509_get_notAfter(p_generated_cert), 31536000L);
-
-    if (!(p_cert_req_pkey = X509_REQ_get_pubkey(x509_req))) {
-        printf("failed to get certificate req pkey\n");
-        X509_free(p_generated_cert);
-        p_generated_cert = NULL;
-        goto CLEANUP;
-    }
-
-    if (X509_set_pubkey(p_generated_cert, p_cert_req_pkey) < 0) {
-        printf("Failed to set pkey\n");
-        X509_free(p_generated_cert);
-        p_generated_cert = NULL;
-        goto CLEANUP;
-    }
-
-    if (EVP_PKEY_copy_parameters(p_ca_pkey, p_ca_key_pkey) < 0) {
-        printf("Failed to copy parameters\n");
-        X509_free(p_generated_cert);
-        p_generated_cert = NULL;
-        goto CLEANUP;
-    }
-
-    if (X509_sign(p_generated_cert, p_ca_key_pkey, EVP_sha256()) < 0) {
-        printf("Failed to sign the certificate\n");
-        X509_free(p_generated_cert);
-        p_generated_cert = NULL;
-        goto CLEANUP;
-    }
-
-	// ---- Save X509 certificate as a file on the server ----
-
-	char path_buf[100];
-	snprintf(path_buf, sizeof(path_buf), "server-dir/mailboxes/%s/%s.cert.pem", uname, uname);
-	if (write_x509_cert_to_file(p_generated_cert, path_buf)) {
-		success = 1;
-	}
-
-    CLEANUP:
-    fclose(p_ca_file);
-    X509_free(p_ca_cert);
-    EVP_PKEY_free(p_ca_pkey);
-    fclose(p_ca_key_file);
-    EVP_PKEY_free(p_ca_key_pkey);
-    ASN1_INTEGER_free(p_serial_number);
-    EVP_PKEY_free(p_cert_req_pkey);
-	X509_free(p_generated_cert);
-
-	return success;
 }
 
 /**
@@ -435,6 +247,213 @@ int tcp_listen() {
 
 	return sock;
 }
+
+/**
+ * Writes a X509 REQ to a file. REQ in form of char *, not X509_REQ.
+ */
+int write_x509_req_to_file(char *csr, char *uname, char *path) {
+
+	FILE *fp;
+	if (!(fp = fopen(path, "wb+"))) {
+		printf("Could not open file to write CSR\n");
+		return 0;
+	}
+	fwrite(csr, 1, strlen(csr), fp);
+	fclose(fp);
+
+	return 1;
+}
+
+/**
+ * Reads X509_REQ from a file containing the REQ.
+ */
+X509_REQ* read_x509_req_from_file(char *uname, char *path) {
+
+	FILE *fp;
+	if (!(fp = fopen(path, "rb+"))) {
+		printf("Could not open file to read CSR\n");
+		return NULL;
+	}
+	X509_REQ *x509_req = PEM_read_X509_REQ(fp, NULL, 0, NULL);
+	fclose(fp);
+
+	return x509_req;
+}
+
+/**
+ * Saves a X509 certificate to a file.
+ */
+int write_x509_cert_to_file(X509 *cert, char *path) {
+
+	FILE *p_file = NULL;
+	if (NULL == (p_file = fopen(path, "wb+"))) {
+		printf("Failed to open file for saving csr\n");
+		return 0;
+	}
+
+	PEM_write_X509(p_file, cert);
+	fclose(p_file);
+	return 1;
+}
+
+/**
+ * Reads a X509 certificate from file into cert_buf 
+ * (does not read in as a X509).
+ */
+int read_x509_cert_from_file(char *cert_buf, int size, char *path) {
+
+	FILE *fp;
+	if (!(fp = fopen(path, "rb+"))) {
+		printf("Could not open file to read certificate\n");
+		return 0;
+	}
+
+	int read = fread(cert_buf, 1, size, fp);
+	printf("server - read in %d\n", read);
+	fclose(fp);
+
+	return read;
+}
+
+/**
+ * Function sourced from OpenSSL demo by egorovandreyrm
+ * at https://github.com/egorovandreyrm/openssl_cert_req/blob/master/main.cpp
+ */
+int rand_serial(ASN1_INTEGER *ai) {
+	BIGNUM *p_bignum = NULL;
+	int ret = -1;
+
+	if (!(p_bignum = BN_new())) {
+		goto CLEANUP;
+	}
+
+	if (!BN_pseudo_rand(p_bignum, 64, 0, 0)) {
+		goto CLEANUP;
+	}
+
+	if (ai && !BN_to_ASN1_INTEGER(p_bignum, ai)) {
+		goto CLEANUP;
+	}
+	ret = 1;
+
+	CLEANUP: BN_free(p_bignum);
+	return ret;
+}
+
+/**
+ * Generates a X509 certificate for a user and saves the new
+ * certificate to the server under the user.
+ * 
+ * Function sourced from OpenSSL demo by egorovandreyrm
+ * at https://github.com/egorovandreyrm/openssl_cert_req/blob/master/main.cpp
+ */
+int generate_cert(X509_REQ *x509_req, const char *p_ca_path,
+		const char *p_ca_key_path, const char *uname) {
+	FILE *p_ca_file = NULL;
+	X509 *p_ca_cert = NULL;
+	EVP_PKEY *p_ca_pkey = NULL;
+	FILE *p_ca_key_file = NULL;
+	EVP_PKEY *p_ca_key_pkey = NULL;
+	X509 *p_generated_cert = NULL;
+	ASN1_INTEGER *p_serial_number = NULL;
+	EVP_PKEY *p_cert_req_pkey = NULL;
+	int success = 0;
+
+	// ---- read-in CA information ----
+
+	if ((p_ca_file = fopen(p_ca_path, "r")) == NULL) {
+		printf("Failed to open the CA certificate file\n");
+		goto CLEANUP;
+	}
+
+	if (!(p_ca_cert = PEM_read_X509(p_ca_file, NULL, 0, NULL))) {
+		printf("Failed to read X509 CA certificate\n");
+		goto CLEANUP;
+	}
+
+	if (!(p_ca_pkey = X509_get_pubkey(p_ca_cert))) {
+		printf("Failed to get X509 CA pkey\n");
+		goto CLEANUP;
+	}
+
+	if (!(p_ca_key_file = fopen(p_ca_key_path, "r"))) {
+		printf("Failed to open the private key file\n");
+		goto CLEANUP;
+	}
+
+	if (!(p_ca_key_pkey = PEM_read_PrivateKey(p_ca_key_file, NULL, NULL, NULL))) {
+		printf("Failed to read the private key file\n");
+		goto CLEANUP;
+	}
+
+	// ---- Create a new X509 certificate ----
+
+	if (!(p_generated_cert = X509_new())) {
+		printf("Failed to allocate a new X509\n");
+		goto CLEANUP;
+	}
+
+	// set information on new certificate 
+	p_serial_number = ASN1_INTEGER_new();
+	rand_serial(p_serial_number);
+	X509_set_serialNumber(p_generated_cert, p_serial_number);
+
+	X509_set_issuer_name(p_generated_cert, X509_get_subject_name(p_ca_cert));
+	X509_set_subject_name(p_generated_cert,
+			X509_REQ_get_subject_name(x509_req));
+
+	X509_gmtime_adj(X509_get_notBefore(p_generated_cert), 0L);
+	X509_gmtime_adj(X509_get_notAfter(p_generated_cert), 31536000L);
+
+	if (!(p_cert_req_pkey = X509_REQ_get_pubkey(x509_req))) {
+		printf("Failed to get public key from certificate\n");
+		X509_free(p_generated_cert);
+		p_generated_cert = NULL;
+		goto CLEANUP;
+	}
+
+	if (X509_set_pubkey(p_generated_cert, p_cert_req_pkey) < 0) {
+		printf("Failed to set public key to new certificate\n");
+		X509_free(p_generated_cert);
+		p_generated_cert = NULL;
+		goto CLEANUP;
+	}
+
+	if (EVP_PKEY_copy_parameters(p_ca_pkey, p_ca_key_pkey) < 0) {
+		printf("Failed to copy parameters\n");
+		X509_free(p_generated_cert);
+		p_generated_cert = NULL;
+		goto CLEANUP;
+	}
+
+	if (X509_sign(p_generated_cert, p_ca_key_pkey, EVP_sha256()) < 0) {
+		printf("Failed to sign the certificate\n");
+		X509_free(p_generated_cert);
+		p_generated_cert = NULL;
+		goto CLEANUP;
+	}
+
+	// ---- Save X509 certificate as a file on the server ----
+
+	char path_buf[100];
+	snprintf(path_buf, sizeof(path_buf), "server-dir/mailboxes/%s/%s.cert.pem",
+			uname, uname);
+	if (write_x509_cert_to_file(p_generated_cert, path_buf)) {
+		success = 1;
+	}
+
+	CLEANUP: fclose(p_ca_file);
+	X509_free(p_ca_cert);
+	EVP_PKEY_free(p_ca_pkey);
+	fclose(p_ca_key_file);
+	EVP_PKEY_free(p_ca_key_pkey);
+	ASN1_INTEGER_free(p_serial_number);
+	EVP_PKEY_free(p_cert_req_pkey);
+	X509_free(p_generated_cert);
+
+	return success;
+}
+
 
 /**
  * Extracts the command and content from an incoming request
