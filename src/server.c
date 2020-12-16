@@ -8,7 +8,7 @@
 #include <openssl/bio.h>
 #include <openssl/err.h>
 #include <ctype.h>
-// #include <crypt.h>  // use if using a linux machine
+#include <crypt.h>  // needs to be included if using linux machine
 
 #include "create_ctx.h"
 #include "server.h"
