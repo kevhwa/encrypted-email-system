@@ -5,10 +5,8 @@ LDLIBS = -lssl -lcrypto # -lcrypt #needs to be added if using linux
 
 .PHONY: all clean install
 
-install: all
-	./create-tree.sh $(DEST); 
-	./ca/create_root_ca.sh $(DEST); 
-	./ca/create_intermediate_ca.sh $(DEST)
+install: clean all
+	./bin/install.sh $(DEST)
 
 all: bin/getcert bin/server
 

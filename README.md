@@ -1,26 +1,14 @@
 # encrypted-messaging-system
 
-### Setup
-
-Note: "tree" can be any directory name.
-The `create_intermediate_ca.sh` script asks for a password to access root CA files in the creation of the intermediate certificate. The password here is "pass".
+### Setup and Build
 
 ```
-$ ./create-tree.sh tree
-$ ./ca/create_root_ca.sh tree
-$ ./ca/create_intermediate_ca.sh tree
+$ make install DEST=tree
 ```
-
-### Build
-```
-$ make all
-```
-
-### Run
 
 #### Start Server
 ```
-$ cd tree
+$ cd tree/server-dir
 $ ../bin/server
 ```
 

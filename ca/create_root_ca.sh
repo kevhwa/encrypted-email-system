@@ -32,8 +32,6 @@ ls
 openssl genrsa -aes256 -passout pass:pass -out private/ca.key.pem 4096
 chmod 400 private/ca.key.pem
 
-echo "got here"
-
 # 3. Create the self-signed root certificate
 # Use the root key just created to create root certificate ca.cert.pm. This certificate
 # should have a long expiration date because when it expires, all certificates signed by CA
@@ -66,7 +64,7 @@ chmod 444 ./certs/ca.cert.pem
 # -noout (display option to prevent output of the encoded version of the certificate)
 # -text (display option that prints out full details of certificate in text form)
 # -in (filename to read certificate from)
-echo "Verifying the created root CA certificate..."
-openssl x509 -noout -text -in ./certs/ca.cert.pem
+# echo "Verifying the created root CA certificate..."
+# openssl x509 -noout -text -in ./certs/ca.cert.pem
 
 echo -e "\nFinished Creating Root CA!"
