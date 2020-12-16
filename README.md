@@ -25,7 +25,7 @@ $ ./bin/getcert -u username -p password
 Where username is a valid username and password is a valid password for that username. For example:
 
 ```
-$ ./bin/getcert -u username -p Cardin_pwns
+$ ./bin/getcert -u addleness -p Cardin_pwns
 ```
 Note that you can also choose to not provide the password and you will be prompted for it:
 ```
