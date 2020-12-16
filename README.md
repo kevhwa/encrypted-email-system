@@ -1,10 +1,13 @@
 # encrypted-messaging-system
 
-### Setup and Build
+### Install 
+
+This will setup the directory structure, generate CA certificates, and build executables.
 
 ```
 $ make install DEST=tree
 ```
+### Run
 
 #### Start Server
 ```
@@ -30,7 +33,7 @@ $ ./bin/getcert -u addleness
 Please provide your password (less than 20 characters): 
 ```
 
-#### Testing/Debugging
+### Notes on Testing/Debugging
 
 The installation script copies over the executables into the client and server directories. If you don't want to install everything everytime as you develop and you just want to use the latest executables, you can do:
 ```
