@@ -14,6 +14,7 @@ else
     mkdir rootca-dir
     mkdir -p client-dir/trusted_ca client-dir/bin
     mkdir -p server-dir/ca server-dir/passwords server-dir/bin
+    mkdir client-dir/mailboxes 
 
 fi
 

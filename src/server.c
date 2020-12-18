@@ -120,11 +120,6 @@ int main(int argc, char **argv) {
 			return 3;
 		}
 
-		if (verify_client) {
-			// do something here to verify the client
-			// this might be a helper function used by multiple programs
-		}
-
 		char buf[4096];
 		err = SSL_read(ssl, buf, sizeof(buf) - 1);
 		buf[err] = '\0';

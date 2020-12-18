@@ -7,6 +7,11 @@ This will setup the directory structure, generate CA certificates, and build exe
 ```
 $ make install DEST=tree
 ```
+
+Open a new terminal. Setup the sandbox, this will bring you right to the serverdire
+```
+$ ./bin/sandbox.sh
+```
 ### Run
 
 #### Start Server
