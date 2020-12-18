@@ -12,6 +12,7 @@ Open a new terminal. Setup the sandbox, this will bring you right to the serverd
 ```
 $ ./bin/sandbox.sh
 ```
+
 ### Run
 
 #### Start Server
