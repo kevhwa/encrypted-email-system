@@ -8,13 +8,19 @@ LDLIBS = -lssl -lcrypto -lcrypt # needs to be added if using linux
 install: clean all
 	./bin/install.sh $(DEST)
 
-all: bin/getcert bin/server
+all: bin/getcert bin/changepw bin/server
 
 bin/getcert: src/client_get_cert.o src/create_ctx.o src/user_io.o
 	$(CC) $(LDFLAGS) src/client_get_cert.o src/create_ctx.o src/user_io.o -o bin/getcert $(LDLIBS)
 
+bin/changepw: src/client_changepw.o src/create_ctx.o src/user_io.o
+	$(CC) $(LDFLAGS) src/client_changepw.o src/create_ctx.o src/user_io.o -o bin/changepw $(LDLIBS)
+
 bin/server: src/server.o src/create_ctx.o
 	$(CC) $(LDFLAGS) src/server.o src/create_ctx.o -o bin/server $(LDLIBS)
+
+client_changepw.o: src/client_changepw.c src/create_ctx.h src/user_io.h
+	$(CC) $(LDFLAGS) -c src/client_changepw.c $(LDLIBS)
 
 client_get_cert.o: src/client_get_cert.c src/create_ctx.h src/user_io.h
 	$(CC) $(LDFLAGS) -c src/client_get_cert.c $(LDLIBS)

@@ -2,7 +2,7 @@
 
 HOME=/home/mushu/security_1/encrypted-messaging-system
 HOMEROOT=$HOME/tree/rootca-dir
-HOMEINTER=$HOME/tree/client-dir/addleness
+HOMEINTER=$HOME/tree/client-dir/mailboxes/addleness
 
 PORT=8000
 

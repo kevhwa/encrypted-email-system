@@ -8,7 +8,7 @@
 #include <openssl/ssl.h>
 
 enum server_command {
-	InvalidCommand,
+	InvalidCommand, 
 	GetCert,
 	ChangePW,
 	SendMsg,

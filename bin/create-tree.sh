@@ -36,3 +36,4 @@ done < ../original_hashed_pass.txt
 # Moves executables into the correct directory
 cp ../bin/server ./server-dir/bin/server
 cp ../bin/getcert ./client-dir/bin/getcert
+cp ../bin/changepw ./client-dir/bin/changepw

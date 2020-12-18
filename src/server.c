@@ -7,9 +7,11 @@
 #include <openssl/ssl.h>
 #include <openssl/bio.h>
 #include <openssl/err.h>
+#include <openssl/rand.h>
 #include <ctype.h>
 #include <crypt.h>  // needs to be included if using linux machine
 
+#include "user_io.h"
 #include "create_ctx.h"
 #include "server.h"
 
@@ -36,11 +38,12 @@ int parse_credentials_from_request_body(char *request_body, char uname[],
 		char pwd[], int buf_len);
 int generate_cert(X509_REQ *req, const char *p_ca_path,
 		const char *p_ca_key_path, const char *uname);
-X509_REQ* read_x509_req_from_file(char *uname, char *path);
-int write_x509_req_to_file(char *csr, char *uname, char *path);
+X509_REQ* read_x509_req_from_file(char *path);
+int write_x509_req_to_file(char *csr, char *path);
 int write_x509_cert_to_file(X509 *cert, char *path);
 int read_x509_cert_from_file(char *cert_buf, int size, char *path);
 int rand_serial(ASN1_INTEGER *ai);
+int write_new_password(char *pass, char *path);
 
 int main(int argc, char **argv) {
 	int err;
@@ -157,7 +160,16 @@ int main(int argc, char **argv) {
 			err = SSL_write(ssl, unauthorized_resp, strlen(unauthorized_resp));
 			goto CLEANUP;
 		}
-
+		
+		memset(buf, 0, sizeof(buf));
+		if (request_handler->command == ChangePW) {
+			SSL_read(ssl, buf, sizeof(buf) - 1);
+			if (strlen(buf) < 2) {
+				err = SSL_write(ssl, bad_request_resp, strlen(bad_request_resp));
+				goto CLEANUP;
+			}
+		}
+		
 		// --- Passed authentication. Read in certificate request --- //
 		char cert_buf[4096];
 		int temp = SSL_read(ssl, cert_buf, sizeof(cert_buf) - 1);
@@ -170,13 +182,13 @@ int main(int argc, char **argv) {
 		snprintf(path, sizeof(path), "mailboxes/%s/%s.csr.pem",
 				uname_buf, uname_buf);
 
-		if (!write_x509_req_to_file(cert_buf, uname_buf, path)) {
+		if (!write_x509_req_to_file(cert_buf, path)) {
 			printf("failed to write csr to file");
 			goto CLEANUP;
 		}
 
 		// ----- Read in the CSR as a CSR object ----- //
-		if (!(x509_req = read_x509_req_from_file(uname_buf, path))) {
+		if (!(x509_req = read_x509_req_from_file( path))) {
 			printf("failed to read csr from file");
 			goto CLEANUP;
 		}
@@ -201,6 +213,18 @@ int main(int argc, char **argv) {
 			goto CLEANUP;
 		}
 
+		// --- Write new password to file, if changepw --- //
+		if (request_handler->command == ChangePW) {
+			
+			char path_buf[100];
+			snprintf(path_buf, sizeof(path_buf), "passwords/%s.txt", uname_buf);
+
+			if (!write_new_password(buf, path_buf)) {
+				err = SSL_write(ssl, internal_error_resp, strlen(internal_error_resp));
+				goto CLEANUP;
+			}
+		}
+		
 		char content_buf[4096];
 		sprintf(content_buf, success_template, read_len);
 
@@ -215,6 +239,39 @@ int main(int argc, char **argv) {
 	close(sock);
 	SSL_CTX_free(ctx);
 }
+
+/**
+ * Writes new password.
+ */
+int write_new_password(char *pass, char *path) {
+
+	// gemerate random bytes
+	unsigned char random_salt[16];
+	int err = RAND_bytes(random_salt, 16);
+	if (err != 1) {
+		return 0;
+	}
+	
+	char salt_buf[21];
+	sprintf(salt_buf, "$6$%s$", random_salt);
+	char *c = crypt(pass, salt_buf);
+
+	printf("Random salt: %s\n", random_salt);
+	printf("Salt buffer: %s\n", salt_buf);
+	printf("New hashed content (%ld): %s\n", strlen(c), c);
+	printf("Location of file: %s\n", path);
+
+	FILE *fp;
+	if (!(fp = fopen(path, "wb+"))) {
+		printf("Could not write new password to file\n");
+		return 0;
+	}
+	fwrite(c, 1, strlen(c), fp);
+	fclose(fp);
+
+	return 1;
+}
+
 
 /**
  * Setup a TCP socket for a connection. Returns file
@@ -251,7 +308,7 @@ int tcp_listen() {
 /**
  * Writes a X509 REQ to a file. REQ in form of char *, not X509_REQ.
  */
-int write_x509_req_to_file(char *csr, char *uname, char *path) {
+int write_x509_req_to_file(char *csr, char *path) {
 
 	FILE *fp;
 	if (!(fp = fopen(path, "wb+"))) {
@@ -267,7 +324,7 @@ int write_x509_req_to_file(char *csr, char *uname, char *path) {
 /**
  * Reads X509_REQ from a file containing the REQ.
  */
-X509_REQ* read_x509_req_from_file(char *uname, char *path) {
+X509_REQ* read_x509_req_from_file(char *path) {
 
 	FILE *fp;
 	if (!(fp = fopen(path, "rb+"))) {

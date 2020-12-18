@@ -88,6 +88,7 @@ void get_hidden_pw(char *password, int max_len) {
 	static struct termios old_terminal;
 	static struct termios new_terminal;
 
+	memset(password, 0, max_len);
 	printf("Please provide your password (less than %d characters): ", max_len);
 
 	// get settings of the actual terminal
