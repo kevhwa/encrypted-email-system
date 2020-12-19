@@ -161,8 +161,12 @@ int main(int argc, char **argv) {
 		if (!write_x509_cert_to_file(cert_buf, path_buf)) {
 			printf("Could not save newly generated certificate to a local file.\n");
 		}
-
-	} else {
+	}
+	else if (strstr(response_buf, "409 Conflict")) {
+		printf("You have unread messages on the server. Please retrieve the messages before "
+			"requesting a password change and new certificate.\n");
+	}
+	else {
 		printf("Sorry, your certificate could not be generated.\n");
 	}
 

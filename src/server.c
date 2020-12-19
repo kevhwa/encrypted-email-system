@@ -9,7 +9,8 @@
 #include <openssl/err.h>
 #include <openssl/rand.h>
 #include <ctype.h>
-// #include <crypt.h>  // needs to be included if using linux machine
+#include <dirent.h>
+#include <crypt.h>  // needs to be included if using linux machine
 
 #include "user_io.h"
 #include "create_ctx.h"
@@ -27,6 +28,7 @@
 const char *bad_request_resp = "HTTP/1.0 400 Bad Request\nContent-Length: 0\n\n";
 const char *not_found_resp = "HTTP/1.0 404 Not Found\nContent-Length: 0\n\n";
 const char *unauthorized_resp = "HTTP/1.0 401 Unauthorized\nContent-Length: 0\n\n";
+const char *conflict_resp = "HTTP/1.0 409 Conflict\nContent-Length: %d\n\n";
 const char *internal_error_resp = "HTTP/1.0 500 Internal Server Error\nContent-Length: 0\n\n";
 const char *success_template = "HTTP/1.0 200 Success\nContent-Length: %d\n\n";
 
@@ -44,6 +46,7 @@ int write_x509_cert_to_file(X509 *cert, char *path);
 int read_x509_cert_from_file(char *cert_buf, int size, char *path);
 int rand_serial(ASN1_INTEGER *ai);
 int write_new_password(char *pass, char *path);
+int awaiting_messages_for_client(char *path);
 
 int main(int argc, char **argv) {
 	int err;
@@ -168,14 +171,29 @@ int main(int argc, char **argv) {
 				goto CLEANUP;
 			}
 		}
-		
-		// --- Passed authentication. Read in certificate request --- //
+
+		//--- If there are unread messages for client, don't let them change their certificate --- //
+		char path[100];
+		snprintf(path, sizeof(path), "mailboxes/%s", uname_buf);
+		if ((err = awaiting_messages_for_client(path)) != 0) {
+			if (err < 0) {
+				fprintf(stderr, "Error occurred trying to determine unread messages.\n");
+				err = SSL_write(ssl, internal_error_resp, strlen(internal_error_resp));
+				goto CLEANUP;
+			} else {
+				fprintf(stdout, "Client has unread messages; will not change certificate.\n");
+				err = SSL_write(ssl, conflict_resp, strlen(conflict_resp));
+				goto CLEANUP;
+			}
+		}
+
+		// --- Passed authentication and OK to change cert. Read in certificate request --- //
 		char cert_buf[4096];
 		int temp = SSL_read(ssl, cert_buf, sizeof(cert_buf) - 1);
 		cert_buf[temp] = '\0';
 
 		// ------------ Save CSR to a CSR file   ----- //
-		char path[100];
+		memset(path, 0, sizeof(path));
 		X509_REQ *x509_req;
 		snprintf(path, sizeof(path), "mailboxes/%s/%s.csr.pem",
 				uname_buf, uname_buf);
@@ -213,11 +231,11 @@ int main(int argc, char **argv) {
 
 		// --- Write new password to file, if changepw --- //
 		if (request_handler->command == ChangePW) {
-			
 			char path_buf[100];
 			snprintf(path_buf, sizeof(path_buf), "passwords/%s.txt", uname_buf);
 
 			if (!write_new_password(buf, path_buf)) {
+				fprintf(stderr, "Error ocurred writing password");
 				err = SSL_write(ssl, internal_error_resp, strlen(internal_error_resp));
 				goto CLEANUP;
 			}
@@ -229,7 +247,8 @@ int main(int argc, char **argv) {
 		err = SSL_write(ssl, content_buf, strlen(content_buf));
 		err = SSL_write(ssl, read_certbuf, read_len);
 
-		CLEANUP: SSL_shutdown(ssl);
+		CLEANUP: 
+		SSL_shutdown(ssl);
 		SSL_free(ssl);
 		close(rqst);
 		free_request_handler(request_handler);
@@ -243,16 +262,27 @@ int main(int argc, char **argv) {
  */
 int write_new_password(char *pass, char *path) {
 
-	// gemerate random bytes
+	// generate random bytes
 	unsigned char random_salt[16];
 	int err = RAND_bytes(random_salt, 16);
 	if (err != 1) {
 		return 0;
 	}
 	
-	char salt_buf[21];
-	sprintf(salt_buf, "$6$%s$", random_salt);
-	char *c = crypt(pass, salt_buf);
+	char *salt_values = "abcdefghijklmnopqrstuvwxzyABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789./";
+	for (int i = 0; i < 16; i++) {
+		unsigned char mask = 63;
+		unsigned char masked = random_salt[i] & mask;
+		random_salt[i] = salt_values[masked];
+	}
+	
+	int pass_size = 20;	
+	char salt_buf[pass_size];
+	sprintf(salt_buf, "$6$%s", random_salt);
+	salt_buf[19] = '\0';
+
+	const char *salt_for_crypt = salt_buf;
+	char *c = crypt((const char *) pass, salt_for_crypt);
 
 	FILE *fp;
 	if (!(fp = fopen(path, "wb+"))) {
@@ -265,6 +295,49 @@ int write_new_password(char *pass, char *path) {
 	return 1;
 }
 
+/**
+ * Count the number of messages awaiting for client.
+ */
+int awaiting_messages_for_client(char *path) {
+	int message_count = 0;
+	DIR *dir;
+	struct dirent *de;
+
+	// These are files to ignore in the count
+	char *parent = "..";
+	char *current = ".";
+	char *known_cert_ext = ".cert.pem";
+	char *known_csr_ext = ".csr.pem";
+
+	if (!(dir = opendir(path))) {
+		fprintf(stderr, "Could not open directory of mailboxes "
+				"to check for unread messages.\n");
+		return -1;
+	}
+
+	while ((de = readdir(dir)) != NULL) {
+		// make sure it's not one of the other known files for
+		// certificates and csr that may be stored in the server dir
+		char *filename = de->d_name;
+		int len = strlen(filename);
+
+		if (!strcmp(parent, filename) || !strcmp(current, filename)) {
+			continue;
+		}
+		else if (len >= strlen(known_csr_ext)
+				&& strcmp(known_csr_ext, &filename[len - strlen(known_csr_ext)]) == 0) {
+			continue;
+		} else if (len >= strlen(known_cert_ext)
+				&& strcmp(known_cert_ext, &filename[len - strlen(known_cert_ext)]) == 0) {
+			continue;
+		} else {
+			message_count++;
+		}
+	}
+	closedir(dir);
+	printf("Client currently has %d unread messages on server.\n", message_count);
+	return message_count;
+}
 
 /**
  * Setup a TCP socket for a connection. Returns file
@@ -620,7 +693,6 @@ int check_credential(char *username, char *submitted_password) {
 
 	// check hashed/salted content with contents of file
 	char *c = crypt(submitted_password, salted_hashed_pw);
-
 	if (strcmp(c, salted_hashed_pw) == 0)
 		return 1;
 
