@@ -137,7 +137,6 @@ int main(int argc, char **argv) {
 	fprintf(stdout, "\nSERVER RESPONSE:\n");
 	err = SSL_read(ssl, response_buf, sizeof(response_buf) - 1);
 	response_buf[err] = '\0';
-	printf("server wrote %d bytes:\n%s\n", err, response_buf);
 
 	if (strstr(response_buf, "200 Success")) {
 		printf("Success!\n");

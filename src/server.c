@@ -168,7 +168,6 @@ int main(int argc, char **argv) {
 		char cert_buf[4096];
 		int temp = SSL_read(ssl, cert_buf, sizeof(cert_buf) - 1);
 		cert_buf[temp] = '\0';
-		fprintf(stdout, "\nCSR Received:\n%s\n", cert_buf);
 
 		// ------------ Save CSR to a CSR file   ----- //
 		char path[100];
@@ -355,7 +354,6 @@ int read_x509_cert_from_file(char *cert_buf, int size, char *path) {
 	}
 
 	int read = fread(cert_buf, 1, size, fp);
-	printf("server - read in %d\n", read);
 	fclose(fp);
 
 	return read;
