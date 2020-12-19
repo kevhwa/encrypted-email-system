@@ -11,7 +11,7 @@ mkdir -p $J/{bin,lib64,lib}
 mkdir -p $J/lib64/x86_64-linux-gnu
 mkdir -p $J/lib/x86_64-linux-gnu
 
-cp -v /bin/{bash,ls} $J/bin
+cp /bin/{bash,ls} $J/bin
 
 list="$(ldd /bin/bash | egrep -o '/lib/.*\.[0-9]')"
 for i in $list; do cp "$i" "${J}${i}"; done
