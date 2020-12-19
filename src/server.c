@@ -60,12 +60,13 @@ int main(int argc, char **argv) {
 	if ((sock = tcp_listen()) < 0) {
 		return 2;
 	}
+	printf(stdout, "\nServer started!\n");
 
 	for (;;) {
 		struct sockaddr_in client_addr;
 		socklen_t alen = sizeof(client_addr);
 
-		fprintf(stdout, "\nWaiting for connection\n");
+		fprintf(stdout, "\nWaiting for connection...\n\n");
 		rqst = accept(sock, (struct sockaddr*) &client_addr, &alen);
 		if (rqst < 0) {
 			fprintf(stderr, "Unable to accept connection.\n");
