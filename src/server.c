@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
 	if ((sock = tcp_listen()) < 0) {
 		return 2;
 	}
-	printf(stdout, "\nServer started!\n");
+	fprintf(stdout, "\nServer started!\n");
 
 	for (;;) {
 		struct sockaddr_in client_addr;
