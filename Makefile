@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -g -Wall -std=c11
 LDFLAGS = -g
-LDLIBS = -lssl -lcrypto -lcrypt # needs to be added if using linux
+LDLIBS = -lssl -lcrypto # -lcrypt # needs to be added if using linux
 
 .PHONY: all clean install-basic install-all
 
@@ -26,13 +26,13 @@ bin/server: src/server.o src/create_ctx.o
 	$(CC) $(LDFLAGS) src/server.o src/create_ctx.o -o bin/server $(LDLIBS)
 
 client_changepw.o: src/client_changepw.c src/create_ctx.h src/user_io.h
-	$(CC) $(LDFLAGS) -c src/client_changepw.c $(LDLIBS)
+	$(CC) $(CFLAGS) -c src/client_changepw.c $(LDLIBS)
 
 client_get_cert.o: src/client_get_cert.c src/create_ctx.h src/user_io.h
-	$(CC) $(LDFLAGS) -c src/client_get_cert.c $(LDLIBS)
+	$(CC) $(CFLAGS) -c src/client_get_cert.c $(LDLIBS)
 
 server.o: src/server.c src/create_ctx.h
-	$(CC) $(LDFLAGS) -c src/server.c $(LDLIBS)
+	$(CC) $(CFLAGS) -c src/server.c $(LDLIBS)
 
 create_ctx.o: src/create_ctx.c src/create_ctx.h
 	$(CC) $(CFLAGS) -c src/create_ctx.c

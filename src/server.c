@@ -10,7 +10,7 @@
 #include <openssl/rand.h>
 #include <ctype.h>
 #include <dirent.h>
-#include <crypt.h>  // needs to be included if using linux machine
+// #include <crypt.h>  // needs to be included if using linux machine
 
 #include "user_io.h"
 #include "create_ctx.h"
@@ -289,6 +289,8 @@ int awaiting_messages_for_client(char *path) {
 	struct dirent *de;
 
 	// These are files to ignore in the count
+	char *parent = "..";
+	char *current = ".";
 	char *known_cert_ext = ".cert.pem";
 	char *known_csr_ext = ".csr.pem";
 
@@ -299,22 +301,22 @@ int awaiting_messages_for_client(char *path) {
 	}
 
 	while ((de = readdir(dir)) != NULL) {
-		if (de->d_type == DT_REG) {
+		// make sure it's not one of the other known files for
+		// certificates and csr that may be stored in the server dir
+		char *filename = de->d_name;
+		int len = strlen(filename);
 
-			// make sure it's not one of the other known files for
-			// certificates and csr that may be stored in the server dir
-			char *filename = de->d_name;
-			int len = strlen(filename);
-
-			if (len >= strlen(known_csr_ext)
-					&& strcmp(known_csr_ext, &filename[len - strlen(known_csr_ext)]) == 0) {
-				continue;
-			} else if (len >= strlen(known_cert_ext)
-					&& strcmp(known_cert_ext, &filename[len - strlen(known_cert_ext)]) == 0) {
-				continue;
-			} else {
-				message_count++;
-			}
+		if (!strcmp(parent, filename) || !strcmp(current, filename)) {
+			continue;
+		}
+		else if (len >= strlen(known_csr_ext)
+				&& strcmp(known_csr_ext, &filename[len - strlen(known_csr_ext)]) == 0) {
+			continue;
+		} else if (len >= strlen(known_cert_ext)
+				&& strcmp(known_cert_ext, &filename[len - strlen(known_cert_ext)]) == 0) {
+			continue;
+		} else {
+			message_count++;
 		}
 	}
 	closedir(dir);
