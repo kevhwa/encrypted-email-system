@@ -235,7 +235,7 @@ void print_usage_information() {
 			"Usage of this program requires specification of the following flag(s):\n"
 					"* [-u] a valid username (required)\n"
 					"* [-p] a valid password (optional, you will be prompted if not provided)\n"
-					"Example usage: getcert -u username -p password\n\n");
+					"Example usage: changepw -u username -p password\n\n");
 }
 
 

@@ -3,10 +3,16 @@ CFLAGS = -g -Wall -std=c11
 LDFLAGS = -g
 LDLIBS = -lssl -lcrypto -lcrypt # needs to be added if using linux
 
-.PHONY: all clean install
+.PHONY: all clean install-basic install-all
 
-install: clean all
-	./bin/install.sh $(DEST)
+install-basic: clean all
+	./bin/install-basic.sh $(DEST)
+
+install-with-security: clean all
+	./bin/install-basic.sh $(DEST)
+	sudo ./bin/install-users.sh
+	sudo ./bin/install-priv.sh $(DEST)
+	sudo ./bin/install-sandbox.sh $(DEST)
 
 all: bin/getcert bin/changepw bin/server
 

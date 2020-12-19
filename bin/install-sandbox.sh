@@ -1,6 +1,10 @@
 #!/bin/bash
 
-export J=./tree/server-dir
+dir="$1"
+ 
+[ $# -eq 0 ] && { echo "Usage: $0 dir-name"; exit 1; }
+
+export J=./$dir/server-dir
 
 mkdir -p $J
 mkdir -p $J/{bin,lib64,lib}
@@ -27,4 +31,4 @@ for i in $list; do cp  -v "$i" "${J}${i}"; done
 list="$(ldd $J/bin/server | egrep -o '/lib64/.*\.[0-9]')"
 for i in $list; do cp  -v "$i" "${J}$c{i}"; done
 
-sudo chroot $J /bin/bash
+sudo chroot $J ./bin/server

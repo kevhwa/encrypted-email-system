@@ -14,8 +14,4 @@ dir="$1"
 ./ca/create_root_ca.sh tree $dir
 ./ca/create_intermediate_ca.sh $dir
 
-# Do privileged work with sudo
-sudo ./bin/mailbox_gen.sh
-sudo ./bin/install-priv.sh $dir
-
 echo -e "\nMessaging System Successfully Installed!"

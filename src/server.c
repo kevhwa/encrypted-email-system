@@ -52,10 +52,9 @@ int main(int argc, char **argv) {
 	char *s;
 	SSL_CTX *ctx;
 	int sock, rqst;
-	int verify_client = OFF;
 
 	// create the SSL context
-	ctx = create_ctx_server(CERTIFICATE_FILE, PRIVATE_KEY_FILE, NULL, 0);
+	ctx = create_ctx_server(CERTIFICATE_FILE, PRIVATE_KEY_FILE, NULL, OFF);
 
 	// create the TCP socket
 	if ((sock = tcp_listen()) < 0) {
