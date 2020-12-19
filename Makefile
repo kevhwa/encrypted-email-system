@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -g -Wall -std=c11
 LDFLAGS = -g
-LDLIBS = -lssl -lcrypto # -lcrypt # needs to be added if using linux
+LDLIBS = -lssl -lcrypto -lcrypt # needs to be added if using linux
 
 .PHONY: all clean install-basic install-all
 

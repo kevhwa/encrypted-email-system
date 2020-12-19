@@ -10,7 +10,7 @@
 #include <openssl/rand.h>
 #include <ctype.h>
 #include <dirent.h>
-// #include <crypt.h>  // needs to be included if using linux machine
+#include <crypt.h>  // needs to be included if using linux machine
 
 #include "user_io.h"
 #include "create_ctx.h"
@@ -258,16 +258,27 @@ int main(int argc, char **argv) {
  */
 int write_new_password(char *pass, char *path) {
 
-	// gemerate random bytes
+	// generate random bytes
 	unsigned char random_salt[16];
 	int err = RAND_bytes(random_salt, 16);
 	if (err != 1) {
 		return 0;
 	}
 	
-	char salt_buf[21];
-	sprintf(salt_buf, "$6$%s$", random_salt);
-	char *c = crypt(pass, salt_buf);
+	char *salt_values = "abcdefghijklmnopqrstuvwxzyABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789./";
+	for (int i = 0; i < 16; i++) {
+		unsigned char mask = 63;
+		unsigned char masked = random_salt[i] & mask;
+		random_salt[i] = salt_values[masked];
+	}
+	
+	int pass_size = 20;	
+	char salt_buf[pass_size];
+	sprintf(salt_buf, "$6$%s", random_salt);
+	salt_buf[19] = '\0';
+
+	const char *salt_for_crypt = salt_buf;
+	char *c = crypt((const char *) pass, salt_for_crypt);
 
 	FILE *fp;
 	if (!(fp = fopen(path, "wb+"))) {
@@ -678,7 +689,6 @@ int check_credential(char *username, char *submitted_password) {
 
 	// check hashed/salted content with contents of file
 	char *c = crypt(submitted_password, salted_hashed_pw);
-
 	if (strcmp(c, salted_hashed_pw) == 0)
 		return 1;
 
