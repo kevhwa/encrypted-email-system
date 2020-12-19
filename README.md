@@ -8,6 +8,11 @@ This will setup the directory structure, generate CA certificates, build executa
 $ make install-with-security DEST=tree
 ```
 
+Make sure that the tree specified does not already exist. If it does:
+```
+$ sudo rm -rf tree
+```
+
 To install the program without security features (i.e., install no uses, file system permissions or sandboxing) use:
 ```
 $ make install-basic DEST=tree
