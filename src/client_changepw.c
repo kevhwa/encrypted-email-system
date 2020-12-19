@@ -146,7 +146,6 @@ int main(int argc, char **argv) {
 	fprintf(stdout, "\nSERVER RESPONSE:\n");
 	err = SSL_read(ssl, response_buf, sizeof(response_buf) - 1);
 	response_buf[err] = '\0';
-	printf("server wrote %d bytes:\n%s\n", err, response_buf);
 
 	if (strstr(response_buf, "200 Success")) {
 		printf("Success!\n");
@@ -235,7 +234,7 @@ void print_usage_information() {
 			"Usage of this program requires specification of the following flag(s):\n"
 					"* [-u] a valid username (required)\n"
 					"* [-p] a valid password (optional, you will be prompted if not provided)\n"
-					"Example usage: getcert -u username -p password\n\n");
+					"Example usage: changepw -u username -p password\n\n");
 }
 
 
@@ -342,9 +341,7 @@ void read_x509_req_from_file(char *uname, char *x509_buf, size_t buf_size) {
 
 	size_t content = fread(x509_buf, 1, buf_size - 1, cert_file);
 	x509_buf[content] = '\0';
-
 	fclose(cert_file);
-	printf("READ CSR FROM FILE:\n%s\n", x509_buf);
 
 	// delete the request now that we've read and are done with it
 	int del = remove(path_buf);

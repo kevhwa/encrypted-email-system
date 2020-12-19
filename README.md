@@ -1,35 +1,37 @@
 # encrypted-messaging-system
 
-### Install 
+## Install 
 
-This will setup the directory structure, generate CA certificates, build executable, and set permissions. Note that this system is designed to be installed on a Ubuntu 20.04.1 LTS VM; there may be incompatibilities if this installation is attempted on another OS.
+This will setup the directory structure, generate CA certificates, build executables, set filesystem permissions, and sandbox the server. This will also start the server within its sandbox automatically. Note that this system is designed to be installed on a Ubuntu 20.04.1 LTS VM; there may be incompatibilities if this installation is attempted on another OS.
 
 ```
-$ make install DEST=tree
+$ make install-with-security DEST=tree
 ```
 
-Open a new terminal and setup the server sandbox. This will bring you right to the server directory where you can start the server (more below).
+Make sure that the tree specified does not already exist. If it does:
 ```
-$ sudo ./bin/install-sandbox.sh
+$ sudo rm -rf tree
 ```
 
-### Run
-
-#### Start Server
-
-If you are already within the server sandbox:
+To install the program without security features (i.e., install no uses, file system permissions or sandboxing) use:
 ```
-$ ./bin/server
+$ make install-basic DEST=tree
 ```
-If you did not setup the sandbox, `cd` into the correct directory, then run the server:
+This can be helpful for testing and development not using the virtual machine, so that there aren't compatibility issues.
+
+## Run
+
+### Start Server
+
+If you installed the system using `make install-with-security`, the server should have already started for you. Otherwise, if you installed the system with `make install-basic` then `cd` into the correct directory and run the server via:
 ```
 $ cd ./tree/server-dir
 $ ./bin/server
 ```
 
-#### Run getcert
+### Run `getcert`
 
-In a separate shell:
+With the server already started, in a separate shell, run:
 ```
 $ cd tree/client-dir
 $ ./bin/getcert -u username -p password
@@ -45,7 +47,7 @@ $ ./bin/getcert -u addleness
 Please provide your password (less than 20 characters): 
 ```
 
-#### Run changepw
+### Run `changepw`
 
 This executable takes the same set of arguments as `getcert`:
 
@@ -53,24 +55,4 @@ This executable takes the same set of arguments as `getcert`:
 $ cd tree/client-dir
 $ ./bin/changepw -u username -p password 
 ```
-The program will prompt a user to provide a new password.
-
-
-### Notes on Testing/Debugging
-
-The installation script copies over the executables into the client and server directories. If you don't want to install everything everytime as you develop and you just want to use the latest executables, you can do:
-```
-$ make all
-```
-And then run the server via:
-```
-$ cd tree/server-dir
-$ ../../bin/server
-```
-And the client via:
-```
-$ cd tree/client-dir
-$ ../../bin/getcert -u addleness
-```
-This approach will maintain the correct paths within the program.
-
+The program will prompt a user to provide a new password that will be saved for their username.

@@ -52,21 +52,21 @@ int main(int argc, char **argv) {
 	char *s;
 	SSL_CTX *ctx;
 	int sock, rqst;
-	int verify_client = OFF;
 
 	// create the SSL context
-	ctx = create_ctx_server(CERTIFICATE_FILE, PRIVATE_KEY_FILE, NULL, 0);
+	ctx = create_ctx_server(CERTIFICATE_FILE, PRIVATE_KEY_FILE, NULL, OFF);
 
 	// create the TCP socket
 	if ((sock = tcp_listen()) < 0) {
 		return 2;
 	}
+	fprintf(stdout, "\nServer started!\n");
 
 	for (;;) {
 		struct sockaddr_in client_addr;
 		socklen_t alen = sizeof(client_addr);
 
-		fprintf(stdout, "\nWaiting for connection\n");
+		fprintf(stdout, "\nWaiting for connection...\n\n");
 		rqst = accept(sock, (struct sockaddr*) &client_addr, &alen);
 		if (rqst < 0) {
 			fprintf(stderr, "Unable to accept connection.\n");
@@ -169,7 +169,6 @@ int main(int argc, char **argv) {
 		char cert_buf[4096];
 		int temp = SSL_read(ssl, cert_buf, sizeof(cert_buf) - 1);
 		cert_buf[temp] = '\0';
-		fprintf(stdout, "\nCSR Received:\n%s\n", cert_buf);
 
 		// ------------ Save CSR to a CSR file   ----- //
 		char path[100];
@@ -236,7 +235,7 @@ int main(int argc, char **argv) {
 }
 
 /**
- * Writes new password.
+ * Writes new (salted and hashed) password to a user's password file.
  */
 int write_new_password(char *pass, char *path) {
 
@@ -250,11 +249,6 @@ int write_new_password(char *pass, char *path) {
 	char salt_buf[21];
 	sprintf(salt_buf, "$6$%s$", random_salt);
 	char *c = crypt(pass, salt_buf);
-
-	printf("Random salt: %s\n", random_salt);
-	printf("Salt buffer: %s\n", salt_buf);
-	printf("New hashed content (%ld): %s\n", strlen(c), c);
-	printf("Location of file: %s\n", path);
 
 	FILE *fp;
 	if (!(fp = fopen(path, "wb+"))) {
@@ -361,7 +355,6 @@ int read_x509_cert_from_file(char *cert_buf, int size, char *path) {
 	}
 
 	int read = fread(cert_buf, 1, size, fp);
-	printf("server - read in %d\n", read);
 	fclose(fp);
 
 	return read;
@@ -624,9 +617,6 @@ int check_credential(char *username, char *submitted_password) {
 	// check hashed/salted content with contents of file
 	char *c = crypt(submitted_password, salted_hashed_pw);
 
-	printf("Read password: %s\n", salted_hashed_pw);
-	printf("Recomputed password: %s\n", c);
-
 	if (strcmp(c, salted_hashed_pw) == 0)
 		return 1;
 
@@ -680,9 +670,6 @@ int parse_credentials_from_request_body(char *request_body, char uname[],
 		fprintf(stderr, "Password could not be parsed from request body");
 		return -1;
 	}
-
-	printf("Username: %s\n", uname);
-	printf("Password: %s\n", pwd);
 	return 0;
 }
 
