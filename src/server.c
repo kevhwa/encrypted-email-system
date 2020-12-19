@@ -30,7 +30,7 @@ const char *not_found_resp = "HTTP/1.0 404 Not Found\nContent-Length: 0\n\n";
 const char *unauthorized_resp = "HTTP/1.0 401 Unauthorized\nContent-Length: 0\n\n";
 const char *conflict_resp = "HTTP/1.0 409 Conflict\nContent-Length: %d\n\n";
 const char *internal_error_resp = "HTTP/1.0 500 Internal Server Error\nContent-Length: 0\n\n";
-const char *success_template = "HTTP/1.0 200 Success\nContent-Length: %d\n\n";;
+const char *success_template = "HTTP/1.0 200 Success\nContent-Length: %d\n\n";
 
 int tcp_listen();
 RequestHandler* init_request_handler();
