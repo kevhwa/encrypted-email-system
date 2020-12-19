@@ -21,8 +21,8 @@ If you are already within the server sandbox:
 ```
 $ ./bin/server
 ```
-Else, if you did not setup the sandbox, `cd` into the correct directory, then run the server:
-``
+If you did not setup the sandbox, `cd` into the correct directory, then run the server:
+```
 $ cd ./tree/server-dir
 $ ./bin/server
 ```
@@ -34,8 +34,8 @@ In a separate shell:
 $ cd tree/client-dir
 $ ./bin/getcert -u username -p password
 ```
-Where username is a valid username and password is a valid password for that username. For example:
 
+Where username is a valid username and password is a valid password for that username. For example:
 ```
 $ ./bin/getcert -u addleness -p Cardin_pwns
 ```
