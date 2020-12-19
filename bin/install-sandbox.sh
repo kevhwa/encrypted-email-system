@@ -14,21 +14,22 @@ mkdir -p $J/lib/x86_64-linux-gnu
 cp -v /bin/{bash,ls} $J/bin
 
 list="$(ldd /bin/bash | egrep -o '/lib/.*\.[0-9]')"
-for i in $list; do cp  -v "$i" "${J}${i}"; done
+for i in $list; do cp "$i" "${J}${i}"; done
 
 list="$(ldd /bin/bash | egrep -o '/lib64/.*\.[0-9]')"
-for i in $list; do cp  -v "$i" "${J}${i}"; done
+for i in $list; do cp "$i" "${J}${i}"; done
 
 list="$(ldd /bin/ls | egrep -o '/lib/.*\.[0-9]')"
-for i in $list; do cp  -v "$i" "${J}${i}"; done
+for i in $list; do cp "$i" "${J}${i}"; done
 
 list="$(ldd /bin/ls | egrep -o '/lib64/.*\.[0-9]')"
-for i in $list; do cp  -v "$i" "${J}${i}"; done
+for i in $list; do cp "$i" "${J}${i}"; done
 
 list="$(ldd $J/bin/server | egrep -o '/lib/.*\.[0-9]')"
-for i in $list; do cp  -v "$i" "${J}${i}"; done
+for i in $list; do cp "$i" "${J}${i}"; done
 
 list="$(ldd $J/bin/server | egrep -o '/lib64/.*\.[0-9]')"
-for i in $list; do cp  -v "$i" "${J}${i}"; done
+for i in $list; do cp "$i" "${J}${i}"; done
 
 sudo chroot $J ./bin/server
+echo -e "\nSandbox installation complete!\n"

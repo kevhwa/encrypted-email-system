@@ -7,12 +7,11 @@ input=("addleness" "analects" "annalistic" "anthropomorphologically" "blepharosp
 for i in ${input[@]}
 do
         random="$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)"
-        groupadd $i
-        useradd -s /usr/bin/false -m -d /home/mailbox/$i  -g $i $i
-        echo -e "$random\n$random\n" | passwd $i
+        getent group $i || groupadd $i
 
+        if ! id $i &>/dev/null; 
+        then 
+                useradd -s /usr/bin/false -m -d /home/mailbox/$i  -g $i $i
+                echo -e "$random\n$random\n" | passwd $i
+        fi
 done
-
-# add new group if it does not already exist
-getent group message-client || groupadd message-client
-
