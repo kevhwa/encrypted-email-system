@@ -1,7 +1,12 @@
 CC = gcc
 CFLAGS = -g -Wall -std=c11
 LDFLAGS = -g
-LDLIBS = -lssl -lcrypto -lcrypt # needs to be added if using linux
+
+ifeq ($(shell uname -s),Darwin)
+LDLIBS = -lssl -lcrypto # -lcrypt # needs to be added if using linux
+else
+LDLIBS = -lssl -lcrypto -lcrypt
+endif
 
 .PHONY: all clean install-basic install-all
 

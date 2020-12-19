@@ -9,7 +9,7 @@
 #include <openssl/err.h>
 #include <openssl/rand.h>
 #include <ctype.h>
-#include <crypt.h>  // needs to be included if using linux machine
+// #include <crypt.h>  // needs to be included if using linux machine
 
 #include "user_io.h"
 #include "create_ctx.h"
@@ -53,8 +53,12 @@ int main(int argc, char **argv) {
 	SSL_CTX *ctx;
 	int sock, rqst;
 
-	// create the SSL context
-	ctx = create_ctx_server(CERTIFICATE_FILE, PRIVATE_KEY_FILE, NULL, OFF);
+	// create the SSL context, with option to use authentication
+
+	if (argc > 1 && argv[1] == "-a")
+		ctx = create_ctx_server(CERTIFICATE_FILE, PRIVATE_KEY_FILE, TRUSTED_CA_FILE, ON);
+	else
+		ctx = create_ctx_server(CERTIFICATE_FILE, PRIVATE_KEY_FILE, NULL, OFF);
 
 	// create the TCP socket
 	if ((sock = tcp_listen()) < 0) {
