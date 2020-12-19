@@ -13,4 +13,6 @@ do
 
 done
 
-groupadd message-client
+# add new group if it does not already exist
+getent group message-client || groupadd message-client
+

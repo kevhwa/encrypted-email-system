@@ -63,3 +63,5 @@ client-dir
 bin/getcert
 bin/server
 bin/changepw
+tree/
+
