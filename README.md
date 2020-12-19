@@ -2,22 +2,27 @@
 
 ## Install 
 
-This will setup the directory structure, generate CA certificates, build executables, set filesystem permissions, and sandbox the server. This will also start the server within its sandbox automatically. Note that this system is designed to be installed on a Ubuntu 20.04.1 LTS VM; there may be incompatibilities if this installation is attempted on another OS.
+First make sure that your virtual machine has build-essential and openssl packages available:
+```
+$ sudo apt-get update
+$ sudo apt-get install build-essential
+$ sudo apt-get install libssl-dev 
+```
 
+Create the encrypted messaging system with the following make command. This will (1) setup the directory structure, (2) generate CA certificates, (3) build executables, (4) set filesystem permissions, and (5) sandbox the server. This will also start the server within its sandbox automatically. You should see "Waiting for connection..." output to the terminal if the installation was successful. Note that this system is designed to be installed on a Ubuntu 20.04.1 LTS VM; there may be incompatibilities if this installation is attempted on another OS. 
 ```
 $ make install-with-security DEST=tree
 ```
 
-Make sure that the tree specified does not already exist. If it does:
+Note: please make sure that the tree specified does not already exist. If it does:
 ```
 $ sudo rm -rf tree
 ```
 
-To install the program without security features (i.e., install no uses, file system permissions or sandboxing) use:
+To install the program without security features (i.e., install no uses, file system permissions or sandboxing) for testing and development purposes:
 ```
 $ make install-basic DEST=tree
 ```
-This can be helpful for testing and development not using the virtual machine, so that there aren't compatibility issues.
 
 ## Run
 
