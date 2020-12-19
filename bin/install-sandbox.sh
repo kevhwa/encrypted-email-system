@@ -29,6 +29,6 @@ list="$(ldd $J/bin/server | egrep -o '/lib/.*\.[0-9]')"
 for i in $list; do cp  -v "$i" "${J}${i}"; done
 
 list="$(ldd $J/bin/server | egrep -o '/lib64/.*\.[0-9]')"
-for i in $list; do cp  -v "$i" "${J}$c{i}"; done
+for i in $list; do cp  -v "$i" "${J}${i}"; done
 
 sudo chroot $J ./bin/server

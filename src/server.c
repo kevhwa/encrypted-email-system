@@ -235,7 +235,7 @@ int main(int argc, char **argv) {
 }
 
 /**
- * Writes new password.
+ * Writes new (salted and hashed) password to a user's password file.
  */
 int write_new_password(char *pass, char *path) {
 
@@ -249,11 +249,6 @@ int write_new_password(char *pass, char *path) {
 	char salt_buf[21];
 	sprintf(salt_buf, "$6$%s$", random_salt);
 	char *c = crypt(pass, salt_buf);
-
-	printf("Random salt: %s\n", random_salt);
-	printf("Salt buffer: %s\n", salt_buf);
-	printf("New hashed content (%ld): %s\n", strlen(c), c);
-	printf("Location of file: %s\n", path);
 
 	FILE *fp;
 	if (!(fp = fopen(path, "wb+"))) {
@@ -623,9 +618,6 @@ int check_credential(char *username, char *submitted_password) {
 	// check hashed/salted content with contents of file
 	char *c = crypt(submitted_password, salted_hashed_pw);
 
-	printf("Read password: %s\n", salted_hashed_pw);
-	printf("Recomputed password: %s\n", c);
-
 	if (strcmp(c, salted_hashed_pw) == 0)
 		return 1;
 
@@ -679,9 +671,6 @@ int parse_credentials_from_request_body(char *request_body, char uname[],
 		fprintf(stderr, "Password could not be parsed from request body");
 		return -1;
 	}
-
-	printf("Username: %s\n", uname);
-	printf("Password: %s\n", pwd);
 	return 0;
 }
 
