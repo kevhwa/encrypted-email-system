@@ -36,6 +36,12 @@ client_changepw.o: src/client_changepw.c src/create_ctx.h src/user_io.h
 client_get_cert.o: src/client_get_cert.c src/create_ctx.h src/user_io.h
 	$(CC) $(CFLAGS) -c src/client_get_cert.c $(LDLIBS)
 
+client_send_msg.o: src/client_send_msg.c src/create_ctx.h src/user_io.h
+	$(CC) $(CFLAGS) -c src/client_send_msg.c $(LDLIBS)
+
+client_recv_msg.o: src/client_recv_msg.c src/create_ctx.h src/user_io.h
+	$(CC) $(CFLAGS) -c src/client_recv_msg.c $(LDLIBS)
+
 server.o: src/server.c src/create_ctx.h
 	$(CC) $(CFLAGS) -c src/server.c $(LDLIBS)
 
