@@ -228,7 +228,7 @@ int main(int argc, char **argv) {
 		// recipient
 		// encrypted_msg_content....
 		char content_buf[128 + n_bytes];
-		int body_len = strlen(certs_handler->recipients[i]) + strlen(username) + strlen(file_buf);
+		int body_len = strlen(certs_handler->recipients[i]) + strlen(username) + strlen(file_buf) + 2;
 		sprintf(content_buf,
 				"POST /sendmsg HTTP/1.0\nContent-Length: %d\n\n%s\n%s\n%s",
 				body_len, username, certs_handler->recipients[i], file_buf);
