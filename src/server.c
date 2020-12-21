@@ -10,13 +10,14 @@
 #include <openssl/rand.h>
 #include <ctype.h>
 #include <dirent.h>
-#include <crypt.h>  // needs to be included if using linux machine
+// #include <crypt.h>  // needs to be included if using linux machine
 
 #include "user_io.h"
 #include "create_ctx.h"
 #include "server.h"
 
-#define SERVER_PORT 8080
+#define AUTH_PORT 8081
+#define NO_AUTH_PORT 8080
 #define ON  1
 #define OFF 0
 #define BAD_REQUEST 400
@@ -32,7 +33,7 @@ const char *conflict_resp = "HTTP/1.0 409 Conflict\nContent-Length: %d\n\n";
 const char *internal_error_resp = "HTTP/1.0 500 Internal Server Error\nContent-Length: 0\n\n";
 const char *success_template = "HTTP/1.0 200 Success\nContent-Length: %d\n\n";
 
-int tcp_listen();
+int tcp_listen(int port);
 RequestHandler* init_request_handler();
 void free_request_handler(RequestHandler *request_handler);
 int check_credential(char *username, char *submitted_password);
@@ -55,15 +56,20 @@ int main(int argc, char **argv) {
 	char *s;
 	SSL_CTX *ctx;
 	int sock, rqst;
+	int port;
 
 	// create the SSL context, with option to use authentication
-	if (argc > 1 && strcmp(argv[1], "-a") == 0)
+	if (argc > 1 && strcmp(argv[1], "-a") == 0) {
 		ctx = create_ctx_server(CERTIFICATE_FILE, PRIVATE_KEY_FILE, TRUSTED_CA_FILE, ON);
-	else
+		port = AUTH_PORT;
+	}
+	else {
 		ctx = create_ctx_server(CERTIFICATE_FILE, PRIVATE_KEY_FILE, NULL, OFF);
+		port = NO_AUTH_PORT;
+	}
 
 	// create the TCP socket
-	if ((sock = tcp_listen()) < 0) {
+	if ((sock = tcp_listen(port)) < 0) {
 		return 2;
 	}
 
@@ -365,7 +371,7 @@ int awaiting_messages_for_client(char *path) {
  * Setup a TCP socket for a connection. Returns file
  * descriptor for socket.
  */
-int tcp_listen() {
+int tcp_listen(int port) {
 
 	struct sockaddr_in sin;
 	int sock;
@@ -378,7 +384,7 @@ int tcp_listen() {
 	bzero(&sin, sizeof sin);
 	sin.sin_addr.s_addr = INADDR_ANY;
 	sin.sin_family = AF_INET;
-	sin.sin_port = htons(SERVER_PORT);
+	sin.sin_port = htons(port);
 
 	if (bind(sock, (struct sockaddr*) &sin, sizeof(sin)) < 0) {
 		perror("bind server failed");

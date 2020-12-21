@@ -17,18 +17,12 @@
 #include "create_ctx.h"
 #include "user_io.h"
 
-#define h_addr h_addr_list[0] /* for backward compatibility */
+#define h_addr h_addr_list[0]  /* for backward compatibility */
 #define TRUSTED_CA "trusted_ca/ca-chain.cert.pem"
 #define CERT_LOCATION_TEMPLATE "mailboxes/%s/%s.cert.pem"
 #define PRIVATE_KEY_TEMPLATE "mailboxes/%s/%s.private.key"
 
 int tcp_connection(char *host_name, int port);
-void print_usage_information();
-EVP_PKEY *generate_key(char *username);
-X509_REQ *generate_cert_req(EVP_PKEY *p_key, char *username, int *size);
-void read_x509_req_from_file(char *uname, char *x509_buf, size_t buf_size);
-int write_x509_req_to_file(X509_REQ *p_x509_req, char *path);
-int write_x509_cert_to_file(char *x509, char *path);
 
 
 int main(int argc, char **argv) {
@@ -126,7 +120,7 @@ int main(int argc, char **argv) {
 	if (strstr(response_buf, "200 Success")) {
 		printf("Success!\n");
 	} else {
-		printf("Sorry, your certificate could not be generated.\n");
+		printf("Sorry!\n");
 	}
 
 	// ------- Clean Up -------- //
@@ -163,17 +157,5 @@ int tcp_connection(char *host_name, int port) {
 		return -1;
 	}
 	return sock;
-}
-
-/**
- * Print out usage information, if user did not provide the correct arguments
- * for the program.
- */
-void print_usage_information() {
-	fprintf(stderr,
-			"Usage of this program requires specification of the following flag(s):\n"
-					"* [-u] a valid username (required)\n"
-					"* [-p] a valid password (optional, you will be prompted if not provided)\n"
-					"Example usage: getcert -u username -p password\n\n");
 }
 

@@ -25,6 +25,7 @@
 #define PRIVATE_KEY_TEMPLATE "mailboxes/%s/%s.private.key"
 #define ENCRYPTED_MSG_TEMPLATE "mailboxes/%s/tmp_encrypted_msg.txt"
 #define SIGNED_MSG_TEMPLATE "mailboxes/%s/tmp_signed_msg.txt"
+#define RECIPIENT_CERT_TEMPLATE "mailboxes/%s/tmp_%s.pem"
 
 int tcp_connection(char *host_name, int port);
 void print_usage_information();
@@ -151,8 +152,7 @@ int main(int argc, char **argv) {
 				char path_buf[100];
 				for (int i = 0; i < certs_handler->num; i++) {
 					memset(path_buf, '\0', sizeof(path_buf));
-					snprintf(path_buf, sizeof(path_buf),
-							"mailboxes/%s/tmp_%s.pem",
+					snprintf(path_buf, sizeof(path_buf), RECIPIENT_CERT_TEMPLATE,
 							certs_handler->recipients[i],
 							certs_handler->recipients[i]);
 
@@ -180,7 +180,7 @@ int main(int argc, char **argv) {
 		sprintf(encrypt_msg_path_buf, ENCRYPTED_MSG_TEMPLATE, username);
 
 		char rcpt_cert_buf[128];
-		snprintf(rcpt_cert_buf, sizeof(rcpt_cert_buf), "mailboxes/%s/tmp_%s.pem",
+		snprintf(rcpt_cert_buf, sizeof(rcpt_cert_buf), RECIPIENT_CERT_TEMPLATE,
 				certs_handler->recipients[i], certs_handler->recipients[i]);
 
 		if (encrypt_message(path, rcpt_cert_buf, encrypt_msg_path_buf)) {
