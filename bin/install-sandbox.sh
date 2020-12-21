@@ -31,5 +31,5 @@ for i in $list; do cp "$i" "${J}${i}"; done
 list="$(ldd $J/bin/server | egrep -o '/lib64/.*\.[0-9]')"
 for i in $list; do cp "$i" "${J}${i}"; done
 
-sudo chroot $J ./bin/server
+sudo chroot $J ./bin/bash
 echo -e "\nSandbox installation complete!\n"
