@@ -723,6 +723,11 @@ int check_credential(char *username, char *submitted_password) {
 
 	fclose(pw_file);
 
+	// handle accidental case when \n is read in
+	if (salted_hashed_pw[strlen(salted_hashed_pw) - 1] == '\n') {
+		salted_hashed_pw[strlen(salted_hashed_pw) - 1] = '\0';
+	}
+
 	// check hashed/salted content with contents of file
 	char *c = crypt(submitted_password, salted_hashed_pw);
 	if (strcmp(c, salted_hashed_pw) == 0)
