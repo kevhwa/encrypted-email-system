@@ -10,7 +10,7 @@
 #include <openssl/rand.h>
 #include <ctype.h>
 #include <dirent.h>
-// #include <crypt.h>  // needs to be included if using linux machine
+#include <crypt.h>  // needs to be included if using linux machine
 
 #include "user_io.h"
 #include "create_ctx.h"

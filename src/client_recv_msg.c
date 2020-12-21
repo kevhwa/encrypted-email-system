@@ -33,8 +33,8 @@ int main(int argc, char **argv) {
 	int sock;
 
 	// figure out who the user is so that their certificate and key can be configured
-	char username[32];
-	if ((err = getlogin_r(username, 32))) {
+	char username;
+	if (!(username = getlogin())) {
 		printf("Failed to determine identify of user.\n");
 		exit(1);
 	}
