@@ -23,7 +23,7 @@
 #define BAD_REQUEST 400
 #define NOT_FOUND 404
 #define CERTIFICATE_FILE "ca/certs/ca-chain.cert.pem"
-#define TRUSTED_CA_FILE "ca/certs/intermediate.cert.pem"
+#define TRUSTED_CA_FILE "ca/certs/ca-chain.cert.pem"
 #define PRIVATE_KEY_FILE "ca/private/intermediate.key.pem"
 
 const char *bad_request_resp = "HTTP/1.0 400 Bad Request\nContent-Length: 0\n\n";

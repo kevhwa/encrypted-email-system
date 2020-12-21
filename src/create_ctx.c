@@ -78,7 +78,7 @@ SSL_CTX* create_ctx_server(char *certificate_file, char *private_key_file,
 	if (verify_client) {
 		SSL_CTX_load_verify_locations(ctx, trusted_ca, NULL);
 		SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, NULL);
-		SSL_CTX_set_verify_depth(ctx, 1);
+		SSL_CTX_set_verify_depth(ctx, 2);
 	} else {
 		SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, NULL);
 		SSL_CTX_set_default_verify_dir(ctx);
