@@ -62,6 +62,8 @@ server-dir
 client-dir
 bin/getcert
 bin/server
+bin/sendmsg
+bin/recvmsg
 bin/changepw
 tree/
 

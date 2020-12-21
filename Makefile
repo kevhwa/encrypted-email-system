@@ -3,9 +3,9 @@ CFLAGS = -g -Wall -std=c11
 LDFLAGS = -g
 
 ifeq ($(shell uname -s),Darwin)
-LDLIBS = -lssl -lcrypto # -lcrypt # needs to be added if using linux
+	LDLIBS = -lssl -lcrypto
 else
-LDLIBS = -lssl -lcrypto -lcrypt
+	LDLIBS = -lssl -lcrypto -lcrypt
 endif
 
 .PHONY: all clean install-basic install-all
@@ -19,13 +19,19 @@ install-with-security: clean all
 	sudo ./bin/install-priv.sh $(DEST)
 	sudo ./bin/install-sandbox.sh $(DEST)
 
-all: bin/getcert bin/changepw bin/server
+all: bin/getcert bin/changepw bin/server bin/sendmsg bin/recvmsg
 
 bin/getcert: src/client_get_cert.o src/create_ctx.o src/user_io.o
 	$(CC) $(LDFLAGS) src/client_get_cert.o src/create_ctx.o src/user_io.o -o bin/getcert $(LDLIBS)
 
 bin/changepw: src/client_changepw.o src/create_ctx.o src/user_io.o
 	$(CC) $(LDFLAGS) src/client_changepw.o src/create_ctx.o src/user_io.o -o bin/changepw $(LDLIBS)
+
+bin/sendmsg: src/client_send_msg.o src/create_ctx.o src/user_io.o
+	$(CC) $(LDFLAGS) src/client_send_msg.o src/create_ctx.o src/user_io.o -o bin/sendmsg $(LDLIBS)
+
+bin/recvmsg: src/client_recv_msg.o src/create_ctx.o src/user_io.o
+	$(CC) $(LDFLAGS) src/client_recv_msg.o src/create_ctx.o src/user_io.o -o bin/recvmsg $(LDLIBS)
 
 bin/server: src/server.o src/create_ctx.o
 	$(CC) $(LDFLAGS) src/server.o src/create_ctx.o -o bin/server $(LDLIBS)
@@ -52,4 +58,4 @@ user_io.o: src/user_io.c src/user_io.h
 	$(CC) $(CFLAGS) -c src/create_ctx.c
 
 clean:
-	rm -f src/*.o bin/getcert bin/server
+	rm -f src/*.o bin/getcert bin/server bin/sendmsg bin/recvmsg

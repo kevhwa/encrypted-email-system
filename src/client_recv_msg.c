@@ -17,16 +17,13 @@
 #include "create_ctx.h"
 #include "user_io.h"
 
-#define h_addr h_addr_list[0] /* for backward compatibility */
+#define h_addr h_addr_list[0]  /* for backward compatibility */
 #define TRUSTED_CA "trusted_ca/ca-chain.cert.pem"
+#define CERT_LOCATION_TEMPLATE "mailboxes/%s/%s.cert.pem"
+#define PRIVATE_KEY_TEMPLATE "mailboxes/%s/%s.private.key"
+#define SERVER_PORT 8081
 
 int tcp_connection(char *host_name, int port);
-void print_usage_information();
-EVP_PKEY *generate_key(char *username);
-X509_REQ *generate_cert_req(EVP_PKEY *p_key, char *username, int *size);
-void read_x509_req_from_file(char *uname, char *x509_buf, size_t buf_size);
-int write_x509_req_to_file(X509_REQ *p_x509_req, char *path);
-int write_x509_cert_to_file(char *x509, char *path);
 
 
 int main(int argc, char **argv) {
@@ -35,21 +32,21 @@ int main(int argc, char **argv) {
 	SSL_CTX *ctx;
 	int sock;
 
-	int MAX_LENGTH = 20;
-	char pass[MAX_LENGTH];
-	char uname[MAX_LENGTH];
-
-	if (get_username_password(argc, argv, pass, uname, MAX_LENGTH) < 0) {
-		print_usage_information();
+	// figure out who the user is so that their certificate and key can be configured
+	char username[32];
+	if ((err = getlogin_r(username, 32))) {
+		printf("Failed to determine identify of user.\n");
 		exit(1);
 	}
 
-	// create the SSL context; note that no certificate
-	// and private key are provided; this will run with username/password
-	ctx = create_ctx_client(NULL, NULL, TRUSTED_CA, 0);
+	char certificate_path[256];
+	char private_key_path[256];
+	sprintf(certificate_path, CERT_LOCATION_TEMPLATE, username, username);
+	sprintf(private_key_path, PRIVATE_KEY_TEMPLATE, username, username);
+	ctx = create_ctx_client(certificate_path, private_key_path, TRUSTED_CA, 1);
 
 	// create the TCP socket
-	if ((sock = tcp_connection("localhost", 8080)) < 0) {
+	if ((sock = tcp_connection("localhost", SERVER_PORT)) < 0) {
 		fprintf(stdout, "Could not create TCP socket...\n");
 		return 2;
 	}
@@ -102,34 +99,17 @@ int main(int argc, char **argv) {
 		return 3;
 	}
 
-	// -------- Create a RSA Key Pair and CSR -------- //
 	char obuf[4096];
 	char content_buf[200];
 	int cert_size = 0;
-	EVP_PKEY *p_key;
-
-	if (!(p_key = generate_key(uname))) {
-		fprintf(stderr, "Could not generate RSA keys.\n");
-		exit(1);
-	}
-
-	// ------------ Generate CSR ------------- //
-	generate_cert_req(p_key, uname, &cert_size);
-	if (!cert_size) {
-		fprintf(stderr, "Could not generate X509 certificate REQ.\n");
-		EVP_PKEY_free(p_key);
-		exit(1);
-	}
-	char cert_buf[cert_size + 1];
-	read_x509_req_from_file(uname, cert_buf, cert_size);
 
 	// -------- Provide content to server -------- //
-	sprintf(content_buf, "%s\n%s\n", uname, pass);
-	sprintf(obuf, "GET /sendmsg HTTP/1.0\nContent-Length: %lu\n\n%s",
-			strlen(content_buf) + cert_size, content_buf);
+	// sprintf(content_buf, "%s\n%s\n", uname, pass);
+	// sprintf(obuf, "GET /sendmsg HTTP/1.0\nContent-Length: %lu\n\n%s",
+	// 		strlen(content_buf) + cert_size, content_buf);
 
-	SSL_write(ssl, obuf, strlen(obuf));
-	SSL_write(ssl, cert_buf, cert_size);
+	// SSL_write(ssl, obuf, strlen(obuf));
+	// SSL_write(ssl, cert_buf, cert_size);
 
 	// --------- Get server response ---------- //
 	char response_buf[4096];
@@ -140,54 +120,15 @@ int main(int argc, char **argv) {
 
 	if (strstr(response_buf, "200 Success")) {
 		printf("Success!\n");
-
-		char cert_buf[4096];
-		err = SSL_read(ssl, cert_buf, sizeof(cert_buf) - 1);
-		cert_buf[err] = '\0';
-
-		printf("Certificate:\n%s\n", cert_buf);
-		char path_buf[100];
-		snprintf(path_buf, sizeof(path_buf), "mailboxes/%s/%s.cert.pem", uname,
-				uname);
-		if (!write_x509_cert_to_file(cert_buf, path_buf)) {
-			printf("Could not save newly generated certificate to a local file.\n");
-		}
-
-	}else if (strstr(response_buf, "409 Conflict")) {
-		printf("You have unread messages on the server. Please retrieve the messages before "
-			"requesting a new certificate.\n");
 	} else {
-		printf("Sorry, your certificate could not be generated.\n");
+		printf("Sorry!\n");
 	}
 
 	// ------- Clean Up -------- //
-	EVP_PKEY_free(p_key);
 	SSL_shutdown(ssl);
 	SSL_free(ssl);
 	close(sock);
 	return 0;
-}
-
-/**
- * Wrties a X509 Certificate to file.
- * Certificate should be string, not a X509 struct.
- */
-int write_x509_cert_to_file(char *x509, char *path) {
-	
-	FILE *p_file = NULL;
-	if (!(p_file = fopen(path, "wb+"))) {
-		printf("Failed to open file for X509 certificate\n");
-		return 0;
-	}
-
-	int write = fwrite(x509, 1, strlen(x509) , p_file);
-	fclose(p_file);
-
-	if (write != strlen(x509)) {
-		printf("Could not write X509 certificate to file\n");
-		return 0;
-	}	
-	return 1;
 }
 
 /**
@@ -219,172 +160,3 @@ int tcp_connection(char *host_name, int port) {
 	return sock;
 }
 
-/**
- * Print out usage information, if user did not provide the correct arguments
- * for the program.
- */
-void print_usage_information() {
-	fprintf(stderr,
-			"Usage of this program requires specification of the following flag(s):\n"
-					"* [-u] a valid username (required)\n"
-					"* [-p] a valid password (optional, you will be prompted if not provided)\n"
-					"Example usage: getcert -u username -p password\n\n");
-}
-
-
-/**
- * Generate a certificate request.
- */
-X509_REQ* generate_cert_req(EVP_PKEY *p_key, char *username, int *size) {
-	X509_REQ *p_x509_req = NULL;
-	X509_NAME *name = NULL;
-
-	if (p_key == NULL) {
-		printf("No EVP_PKEY provided\n");
-	}
-
-	// create new X509 REQ
-	if ((p_x509_req = X509_REQ_new()) == NULL) {
-		printf("Failed to create a new X509 REQ\n");
-		goto CLEANUP;
-	}
-
-	// set the public key on the REQ
-	if (X509_REQ_set_pubkey(p_x509_req, p_key) < 0) {
-		printf("Failed to set pubic key\n");
-		X509_REQ_free(p_x509_req);
-		p_x509_req = NULL;
-		goto CLEANUP;
-	}
-
-	// add information about the client to the CSR
-	if ((name = X509_REQ_get_subject_name(p_x509_req)) == NULL) {
-		printf("Failed to get subject name from REQ\n");
-		X509_REQ_free(p_x509_req);
-		p_x509_req = NULL;
-		goto CLEANUP;
-	}
-
-	X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC,
-			(const unsigned char*) username, -1, -1, 0);
-	X509_NAME_add_entry_by_txt(name, "O", MBSTRING_ASC,
-			(const unsigned char*) "A Really Cool Organization", -1, -1, 0);
-	X509_NAME_add_entry_by_txt(name, "C", MBSTRING_ASC,
-			(const unsigned char*) "US", -1, -1, 0);
-
-	// Sign the REQ
-	if (X509_REQ_sign(p_x509_req, p_key, EVP_sha256()) < 0) {
-		printf("Failed to sign the X509 REQ.\n");
-		X509_REQ_free(p_x509_req);
-		p_x509_req = NULL;
-		goto CLEANUP;
-	}
-
-	CLEANUP: EVP_PKEY_free(p_key);
-
-	// -- Save X509 REQ to a file, saving the size of content written -- //
-	char path_buf[100];
-	snprintf(path_buf, sizeof(path_buf), "mailboxes/%s/cert_req.pem",
-			username);
-	*size = write_x509_req_to_file(p_x509_req, path_buf);
-	return p_x509_req;
-}
-
-/**
- * Saves X509 REQ to file, returns the number of bytes in the written REQ.
- */
-int write_x509_req_to_file(X509_REQ *p_x509_req, char *path) {
-
-	if (!p_x509_req) {
-		return 0;
-	}
-
-	FILE *x509_file = fopen(path, "wb");
-	if (!x509_file) {
-		printf("Unable to open CSR file for writing.\n");
-		X509_REQ_free(p_x509_req);
-		return 0;
-	}
-
-	int ret;
-	if (!(ret = PEM_write_X509_REQ(x509_file, p_x509_req))) {
-		printf("Attempt to save X509 REQ to file failed.\n");
-		return 0;
-	}
-	fclose(x509_file);
-
-	struct stat st;
-	stat(path, &st);
-	return st.st_size;
-}
-
-/**
- * Opens a newly created X509 REQ file into a string. Once read,
- * deletes the CSR file, as it is no longer needed.
- */
-void read_x509_req_from_file(char *uname, char *x509_buf, size_t buf_size) {
-
-	// Open the newly saved cert_req.pm file, as char *
-	char path_buf[100];
-	snprintf(path_buf, sizeof(path_buf), "mailboxes/%s/cert_req.pem", uname);
-	FILE *cert_file = fopen(path_buf, "rb+");
-	if (!cert_file) {
-		printf("Could not open file for cert request.\n");
-		return;
-	}
-
-	size_t content = fread(x509_buf, 1, buf_size - 1, cert_file);
-	x509_buf[content] = '\0';
-	fclose(cert_file);
-
-	// delete the request now that we've read and are done with it
-	int del = remove(path_buf);
-	if (del != 0)
-		printf("CSR file was not successfully removed.\n");
-	return;
-}
-
-/**
- * Generate a 2048-bit RSA key and save to a file
- * under the specified username.
- */
-EVP_PKEY* generate_key(char *username) {
-
-	// --- create the RSA KEY ----
-	EVP_PKEY_CTX *ctx;
-	EVP_PKEY *pkey = NULL;
-	ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, NULL);
-	if (!ctx) {
-		fprintf(stderr, "Could not create EVP_PKEY_ctx.\n");
-		return NULL;
-	}
-	if (EVP_PKEY_keygen_init(ctx) <= 0) {
-		fprintf(stderr, "Could not initialize public key algorithm context.\n");
-		return NULL;
-	}
-	if (EVP_PKEY_CTX_set_rsa_keygen_bits(ctx, 2048) <= 0) {
-		fprintf(stderr, "Could not set the RSA key length for RSA key generation.\n");
-		return NULL;
-	}
-	if (EVP_PKEY_keygen(ctx, &pkey) <= 0) {
-		fprintf(stderr, "Could not perform key generation operation.\n");
-		return NULL;
-	}
-
-	// --- Save the RSA key to file ----
-	char path_buf[100];
-	snprintf(path_buf, sizeof(path_buf), "mailboxes/%s/private.key", username);
-
-	FILE *pkey_file = fopen(path_buf, "wb");
-	if (!pkey_file) {
-		printf("Could not open and write private key to file.\n");
-		EVP_PKEY_free(pkey);
-		return NULL;
-	}
-
-	PEM_write_PrivateKey(pkey_file, pkey, NULL, NULL, 0, NULL, NULL);
-	fclose(pkey_file);
-
-	// --- Return the private key ----	
-	return pkey;
-}
