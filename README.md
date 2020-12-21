@@ -5,12 +5,12 @@
 First make sure that your virtual machine has build-essential and openssl packages available:
 ```
 $ sudo apt-get update
-$ sudo apt-get install build-essential
-$ sudo apt-get install libssl-dev 
-$ sudo apt-get install whois
+$ sudo apt-get install build-essential   # basic essentials
+$ sudo apt-get install libssl-dev        # openssl libraries
+$ sudo apt-get install whois             # this is to add mkpasswd, so current user can be setup
 ```
 
-Create the encrypted messaging system with the following make command. This will (1) setup the directory structure, (2) generate CA certificates, (3) build executables, (4) set filesystem permissions, and (5) sandbox the server. This will also start the server within its sandbox automatically. You should see "Waiting for connection..." output to the terminal if the installation was successful. Note that this system is designed to be installed on a Ubuntu 20.04.1 LTS VM; there may be incompatibilities if this installation is attempted on another OS. 
+Create the encrypted messaging system with the following make command. This will (1) setup the directory structure, (2) generate CA certificates, (3) build executables, (4) set filesystem permissions, and (5) sandbox the server. Note that this system is designed to be installed on a Ubuntu 20.04.1 LTS VM; there may be incompatibilities if this installation is attempted on another OS. 
 ```
 $ make install-with-security DEST=tree
 ```
@@ -29,10 +29,19 @@ $ make install-basic DEST=tree
 
 ### Start Server
 
-If you installed the system using `make install-with-security`, the server should have already started for you. Otherwise, if you installed the system with `make install-basic` then `cd` into the correct directory and run the server via:
+If you installed the system using `make install-with-security`, the sandboxing setup should have brought you to the server directory, `server-dir`. Otherwise, if you installed the system with `make install-basic` then `cd` into the correct directory. The server needs to be run with client authentication and without (these will listen on different ports). Hence, to run the server:
 ```
-$ cd ./tree/server-dir
-$ ./bin/server
+$ ./bin/server  # start the server that doesn't verify client certs
+```
+And in a separate shell:
+```
+$ ./bin/server -a  # start the server that does verify client certs
+```
+Note that if you ran `make install-with-security`, you will need to use `sudo` to cd into the `server-dir`:
+```
+$ sudo -s
+$ cd tree/server-dir
+$ ./bin/server -a
 ```
 
 ### Run `getcert`
