@@ -147,7 +147,7 @@ int tcp_connection(char *host_name, int port) {
 
 	sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (sock < 0) {
-		fprintf(stdout, "Socket creation failed");
+		fprintf(stdout, "Socket creation failed.\n");
 		return -1;
 	}
 
@@ -158,7 +158,7 @@ int tcp_connection(char *host_name, int port) {
 	he = gethostbyname(host_name);
 	memcpy(&sin.sin_addr, (struct in_addr *)he->h_addr, he->h_length);
 	if (connect(sock, (struct sockaddr*) &sin, sizeof sin) < 0) {
-		fprintf(stdout, "Socket connection failed");
+		fprintf(stdout, "Socket connection failed.\n");
 		return -1;
 	}
 	return sock;
