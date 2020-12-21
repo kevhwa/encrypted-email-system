@@ -21,6 +21,7 @@
 #define TRUSTED_CA "trusted_ca/ca-chain.cert.pem"
 #define CERT_LOCATION_TEMPLATE "mailboxes/%s/%s.cert.pem"
 #define PRIVATE_KEY_TEMPLATE "mailboxes/%s/%s.private.key"
+#define SERVER_PORT 8081
 
 int tcp_connection(char *host_name, int port);
 
@@ -45,7 +46,7 @@ int main(int argc, char **argv) {
 	ctx = create_ctx_client(certificate_path, private_key_path, TRUSTED_CA, 1);
 
 	// create the TCP socket
-	if ((sock = tcp_connection("localhost", 8080)) < 0) {
+	if ((sock = tcp_connection("localhost", SERVER_PORT)) < 0) {
 		fprintf(stdout, "Could not create TCP socket...\n");
 		return 2;
 	}
