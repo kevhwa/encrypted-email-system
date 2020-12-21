@@ -38,7 +38,8 @@ done < ../original_hashed_pass.txt
 (umask 077; mkdir -p client-dir/mailboxes/$USER)
 (umask 077; mkdir -p server-dir/mailboxes/$USER)
 
-echo -n "$6$6Q91iwuqLM.qU274$ZDfklyqjQwwejS0zvFmog4jlpImIy81gq1Itc094mCP2WcQdcd1vLsvFakMQjLCj92yrpEhOtxShtNXsb5rt./" > "./server-dir/passwords/${USER}.txt"
+# make sure that mkpasswd is installed on your machine first...
+mkpasswd --method=sha512crypt --salt=6Q91iwuqLM.qU274 "testuser" > "./server-dir/passwords/${USER}.txt"
 
 # Moves executables into the correct directory
 cp ../bin/server ./server-dir/bin/server
