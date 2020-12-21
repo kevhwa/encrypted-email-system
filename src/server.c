@@ -270,7 +270,35 @@ int main(int argc, char **argv) {
 //
 //			} while (1);
 		}
-		else if (request_handler->command == SendMsg) {
+		else if (request_handler->command == SendMsg_Get) {
+			//get name of recipient
+			char *startreq = request_handler->request_content;
+			char *enduname = strchr(startreq, '\n');
+			memcpy(uname_buf, startreq, enduname-startreq);
+			uname_buf[enduname-startreq] = 0;
+			
+			memset(buf, 0, sizeof(buf));
+
+
+			char read_certbuf[4096];
+			char tmp_buf[100];
+			int read_len = 0;
+			snprintf(tmp_buf, sizeof(tmp_buf), "mailboxes/%s/%s.cert.pem", uname_buf, uname_buf);
+
+			if ((read_len = read_x509_cert_from_file(read_certbuf,
+					sizeof(read_certbuf), tmp_buf)) == 0) {
+
+				err = SSL_write(ssl, internal_error_resp, strlen(internal_error_resp));
+				goto CLEANUP;
+			}
+
+			char content_buf[4096];
+			sprintf(content_buf, success_template, read_len);
+
+			err = SSL_write(ssl, content_buf, strlen(content_buf));
+			err = SSL_write(ssl, read_certbuf, read_len);
+		}
+		else if (request_handler->command == SendMsg_Post) {
 		}
 		else if (request_handler->command == RecvMsg) {
 		}
@@ -613,7 +641,8 @@ RequestHandler* handle_recvd_msg(char *buf) {
 
 	char *getcert = "POST /getcert HTTP/1.0";
 	char *changepw = "POST /changepw HTTP/1.0";
-	char *sendmsg = "POST /sendmsg HTTP/1.0";
+	char *sendmsg_get = "GET /sendmsg HTTP/1.0";
+	char *sendmsg_post = "POST /sendmsg HTTP/1.0";
 	char *recvmsg = "POST /recvmsg HTTP/1.0";
 	char *usercerts = "GET /certificates HTTP/1.0";
 
@@ -641,9 +670,12 @@ RequestHandler* handle_recvd_msg(char *buf) {
 	} else if ((strncmp(changepw, line, strlen(changepw) - 3) == 0)
 			&& (strlen(line) == strlen(changepw))) {
 		request_handler->command = ChangePW;
-	} else if ((strncmp(sendmsg, line, strlen(sendmsg) - 3) == 0)
-			&& (strlen(line) == strlen(sendmsg))) {
-		request_handler->command = SendMsg;
+	} else if ((strncmp(sendmsg_get, line, strlen(sendmsg_get) - 3) == 0)
+			&& (strlen(line) == strlen(sendmsg_get))) {
+		request_handler->command = SendMsg_Get;
+	}else if ((strncmp(sendmsg_get, line, strlen(sendmsg_post) - 3) == 0)
+			&& (strlen(line) == strlen(sendmsg_post))) {
+		request_handler->command = SendMsg_Post;
 	} else if ((strncmp(recvmsg, line, strlen(recvmsg) - 3) == 0)
 			&& (strlen(line) == strlen(recvmsg))) {
 		request_handler->command = RecvMsg;
