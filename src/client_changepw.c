@@ -223,7 +223,7 @@ int tcp_connection(char *host_name, int port) {
 	he = gethostbyname(host_name);
 	memcpy(&sin.sin_addr, (struct in_addr *)he->h_addr, he->h_length);
 	if (connect(sock, (struct sockaddr*) &sin, sizeof sin) < 0) {
-		fprintf(stdout, "Socket connection failed");
+		fprintf(stdout, "Socket connection failed.\n");
 		return -1;
 	}
 	return sock;
@@ -383,7 +383,7 @@ EVP_PKEY* generate_key(char *username) {
 
 	// --- Save the RSA key to file ----
 	char path_buf[100];
-	snprintf(path_buf, sizeof(path_buf), "mailboxes/%s/private.key", username);
+	snprintf(path_buf, sizeof(path_buf), "mailboxes/%s/%s.private.key", username, username);
 
 	FILE *pkey_file = fopen(path_buf, "wb");
 	if (!pkey_file) {

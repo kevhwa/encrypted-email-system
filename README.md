@@ -7,6 +7,7 @@ First make sure that your virtual machine has build-essential and openssl packag
 $ sudo apt-get update
 $ sudo apt-get install build-essential
 $ sudo apt-get install libssl-dev 
+$ sudo apt-get install whois
 ```
 
 Create the encrypted messaging system with the following make command. This will (1) setup the directory structure, (2) generate CA certificates, (3) build executables, (4) set filesystem permissions, and (5) sandbox the server. This will also start the server within its sandbox automatically. You should see "Waiting for connection..." output to the terminal if the installation was successful. Note that this system is designed to be installed on a Ubuntu 20.04.1 LTS VM; there may be incompatibilities if this installation is attempted on another OS. 

@@ -10,7 +10,7 @@
 #include <openssl/rand.h>
 #include <ctype.h>
 #include <dirent.h>
-// #include <crypt.h>  // needs to be included if using linux machine
+#include <crypt.h>  // needs to be included if using linux machine
 
 #include "user_io.h"
 #include "create_ctx.h"
@@ -23,7 +23,7 @@
 #define BAD_REQUEST 400
 #define NOT_FOUND 404
 #define CERTIFICATE_FILE "ca/certs/ca-chain.cert.pem"
-#define TRUSTED_CA_FILE "ca/certs/intermediate.cert.pem"
+#define TRUSTED_CA_FILE "ca/certs/ca-chain.cert.pem"
 #define PRIVATE_KEY_FILE "ca/private/intermediate.key.pem"
 
 const char *bad_request_resp = "HTTP/1.0 400 Bad Request\nContent-Length: 0\n\n";
@@ -722,6 +722,11 @@ int check_credential(char *username, char *submitted_password) {
 	salted_hashed_pw[content] = '\0';
 
 	fclose(pw_file);
+
+	// handle accidental case when \n is read in
+	if (salted_hashed_pw[strlen(salted_hashed_pw) - 1] == '\n') {
+		salted_hashed_pw[strlen(salted_hashed_pw) - 1] = '\0';
+	}
 
 	// check hashed/salted content with contents of file
 	char *c = crypt(submitted_password, salted_hashed_pw);

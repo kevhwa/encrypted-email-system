@@ -33,8 +33,8 @@ int main(int argc, char **argv) {
 	int sock;
 
 	// figure out who the user is so that their certificate and key can be configured
-	char username[32];
-	if ((err = getlogin_r(username, 32))) {
+	char *username;
+	if (!(username = getlogin())) {
 		printf("Failed to determine identify of user.\n");
 		exit(1);
 	}
@@ -43,7 +43,11 @@ int main(int argc, char **argv) {
 	char private_key_path[256];
 	sprintf(certificate_path, CERT_LOCATION_TEMPLATE, username, username);
 	sprintf(private_key_path, PRIVATE_KEY_TEMPLATE, username, username);
-	ctx = create_ctx_client(certificate_path, private_key_path, TRUSTED_CA, 1);
+	if (!(ctx = create_ctx_client(certificate_path, private_key_path, TRUSTED_CA, 1))) {
+		fprintf(stderr, "Please make sure that you have a private key and certificate "
+				"before continuing. You can generate it using the 'getcert' program.\n");
+		exit(2);
+	}
 
 	// create the TCP socket
 	if ((sock = tcp_connection("localhost", SERVER_PORT)) < 0) {
@@ -143,7 +147,7 @@ int tcp_connection(char *host_name, int port) {
 
 	sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (sock < 0) {
-		fprintf(stdout, "Socket creation failed");
+		fprintf(stdout, "Socket creation failed.\n");
 		return -1;
 	}
 
@@ -154,7 +158,7 @@ int tcp_connection(char *host_name, int port) {
 	he = gethostbyname(host_name);
 	memcpy(&sin.sin_addr, (struct in_addr *)he->h_addr, he->h_length);
 	if (connect(sock, (struct sockaddr*) &sin, sizeof sin) < 0) {
-		fprintf(stdout, "Socket connection failed");
+		fprintf(stdout, "Socket connection failed.\n");
 		return -1;
 	}
 	return sock;

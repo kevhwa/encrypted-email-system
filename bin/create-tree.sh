@@ -33,6 +33,13 @@ do
   ((j++))
 done < ../original_hashed_pass.txt
 
+# Add a separate password for a specific user; the password is "testuser"
+
+(umask 077; mkdir -p client-dir/mailboxes/$USER)
+(umask 077; mkdir -p server-dir/mailboxes/$USER)
+
+# make sure that mkpasswd is installed on your machine first...
+mkpasswd --method=sha512crypt --salt=6Q91iwuqLM.qU274 "testuser" > "./server-dir/passwords/${USER}.txt"
 
 # Moves executables into the correct directory
 cp ../bin/server ./server-dir/bin/server

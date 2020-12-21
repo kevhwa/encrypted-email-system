@@ -43,8 +43,8 @@ int main(int argc, char **argv) {
 	int sock;
 
 	// figure out who the user is so that their certificate and key can be configured
-	char username[32];
-	if ((err = getlogin_r(username, 32))) {
+	char *username;
+	if (!(username = getlogin())) {
 		printf("Failed to determine identify of user.\n");
 		exit(1);
 	}
@@ -53,7 +53,14 @@ int main(int argc, char **argv) {
 	char private_key_path[256];
 	sprintf(certificate_path, CERT_LOCATION_TEMPLATE, username, username);
 	sprintf(private_key_path, PRIVATE_KEY_TEMPLATE, username, username);
-	ctx = create_ctx_client(certificate_path, private_key_path, TRUSTED_CA, 1);
+
+
+
+	if (!(ctx = create_ctx_client(certificate_path, private_key_path, TRUSTED_CA, 1))) {
+		fprintf(stderr, "Please make sure that you have a private key and certificate "
+				"before continuing. You can generate it using the 'getcert' program.\n");
+		exit(2);
+	}
 
 	int MAX_RCPT_LENGTH = 20;
 	int MAX_RCPTS_LENGTH = 190;
@@ -71,7 +78,7 @@ int main(int argc, char **argv) {
 	// -------- Make sure file can be read -------- //
 	FILE* fp = fopen(path, "r");
 	if (fp == NULL) {
-		printf("Error: file cannot be opened or read");
+		printf("The file you submitted cannot be opened or read\n");
 		return 2;
 	}
 

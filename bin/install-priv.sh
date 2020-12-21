@@ -31,6 +31,13 @@ do
     chmod 770 ./$dir/client-dir/mailboxes/$mailbox
 done
 
+# Add permissions for current user as well and provide current user with a password
+
+chown ${USER}:message-client ./$dir/client-dir/mailboxes/${USER}
+chmod 770 ./$dir/client-dir/mailboxes/${USER}
+
+# Change permissions for server dir and rootca dir
+
 chown server:server ./$dir/server-dir
 chmod 700 ./$dir/server-dir
 
