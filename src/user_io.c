@@ -174,34 +174,6 @@ int get_sendmsg_args(int argc, char *argv[], char buff_path[],
 			current_rcpts_size += 1;
 		}
 	}
-	return 0;
-}
-
-/**
- * Get all data from a file
- */
-char* get_file_data(FILE *fp) {
-	char *data = (char*) malloc(sizeof(char) * 1000);
-	data[0] = '\0'; // make null-terminated
-
-	char *line_buf = NULL;
-	ssize_t line_size;
-	size_t line_buf_size = 0;
-	size_t data_size = 0;
-	size_t max_size = 1000;
-
-	while ((line_size = getline(&line_buf, &line_buf_size, fp)) > 0) {
-		char *old = data;
-		data_size += strlen(line_buf);
-		data = realloc(data, 2 * (data_size + data_size));
-		if (data == NULL) {
-			fprintf(stderr, "\nFailed to reallocate data");
-			free(line_buf);
-			free(old);
-			return NULL;
-		}
-		strcat(data, line_buf);
-	}
-	free(line_buf);
+	
 	return data;
 }

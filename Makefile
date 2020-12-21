@@ -27,11 +27,11 @@ bin/getcert: src/client_get_cert.o src/create_ctx.o src/user_io.o
 bin/changepw: src/client_changepw.o src/create_ctx.o src/user_io.o
 	$(CC) $(LDFLAGS) src/client_changepw.o src/create_ctx.o src/user_io.o -o bin/changepw $(LDLIBS)
 
-bin/sendmsg: src/client_send_msg.o src/create_ctx.o src/user_io.o
-	$(CC) $(LDFLAGS) src/client_send_msg.o src/create_ctx.o src/user_io.o -o bin/sendmsg $(LDLIBS)
+bin/sendmsg: src/client_send_msg.o src/create_ctx.o src/user_io.o src/custom_utils.o
+	$(CC) $(LDFLAGS) src/client_send_msg.o src/create_ctx.o src/user_io.o src/custom_utils.o -o bin/sendmsg $(LDLIBS)
 
-bin/recvmsg: src/client_recv_msg.o src/create_ctx.o src/user_io.o
-	$(CC) $(LDFLAGS) src/client_recv_msg.o src/create_ctx.o src/user_io.o -o bin/recvmsg $(LDLIBS)
+bin/recvmsg: src/client_recv_msg.o src/create_ctx.o src/user_io.o src/custom_utils.o
+	$(CC) $(LDFLAGS) src/client_recv_msg.o src/create_ctx.o src/user_io.o src/custom_utils.o -o bin/recvmsg $(LDLIBS)
 
 bin/server: src/server.o src/create_ctx.o
 	$(CC) $(LDFLAGS) src/server.o src/create_ctx.o -o bin/server $(LDLIBS)
@@ -42,10 +42,10 @@ client_changepw.o: src/client_changepw.c src/create_ctx.h src/user_io.h
 client_get_cert.o: src/client_get_cert.c src/create_ctx.h src/user_io.h
 	$(CC) $(CFLAGS) -c src/client_get_cert.c $(LDLIBS)
 
-client_send_msg.o: src/client_send_msg.c src/create_ctx.h src/user_io.h
+client_send_msg.o: src/client_send_msg.c src/create_ctx.h src/user_io.h src/custom_utils.h
 	$(CC) $(CFLAGS) -c src/client_send_msg.c $(LDLIBS)
 
-client_recv_msg.o: src/client_recv_msg.c src/create_ctx.h src/user_io.h
+client_recv_msg.o: src/client_recv_msg.c src/create_ctx.h src/user_io.h src/custom_utils.h
 	$(CC) $(CFLAGS) -c src/client_recv_msg.c $(LDLIBS)
 
 server.o: src/server.c src/create_ctx.h
@@ -56,6 +56,9 @@ create_ctx.o: src/create_ctx.c src/create_ctx.h
 
 user_io.o: src/user_io.c src/user_io.h
 	$(CC) $(CFLAGS) -c src/create_ctx.c
+
+custom_utils.o: src/custom_utils.c src/custom_utils.h
+	$(CC) $(CFLAGS) -c src/custom_utils.c
 
 clean:
 	rm -f src/*.o bin/getcert bin/server bin/sendmsg bin/recvmsg

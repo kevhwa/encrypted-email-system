@@ -12,18 +12,26 @@
 #include <openssl/err.h>
 #include <openssl/rsa.h>
 #include <openssl/pem.h>
+#include <openssl/cms.h>
 #include <openssl/x509.h>
 
 #include "create_ctx.h"
 #include "user_io.h"
+#include "custom_utils.h"
 
 #define h_addr h_addr_list[0]  /* for backward compatibility */
 #define TRUSTED_CA "trusted_ca/ca-chain.cert.pem"
 #define CERT_LOCATION_TEMPLATE "mailboxes/%s/%s.cert.pem"
 #define PRIVATE_KEY_TEMPLATE "mailboxes/%s/%s.private.key"
+#define VERIFIED_ENCRYPTED_MSG_TEMPLATE "mailboxes/%s/tmp_verified_msg.txt"
+#define DECRYPTED_MSG_TEMPLATE "mailboxes/%s/tmp_decrypted_msg.txt"
 #define SERVER_PORT 8081
 
 int tcp_connection(char *host_name, int port);
+int verify_message(char *msg_file_path, char *verified_msg_path, 
+		char *sender_cert_path);
+int decrypt_message(char *encrypted_msg_path, char *decrypted_msg_path, 
+		char *client_cert_path, char *client_pkey_path);
 
 
 int main(int argc, char **argv) {
@@ -103,32 +111,72 @@ int main(int argc, char **argv) {
 		return 3;
 	}
 
+	// -------- Make request to get messages from server -------- //
+
+	char content_buf[4000];
 	char obuf[4096];
-	char content_buf[200];
-	int cert_size = 0;
-
-	// -------- Provide content to server -------- //
-	// sprintf(content_buf, "%s\n%s\n", uname, pass);
-	// sprintf(obuf, "GET /sendmsg HTTP/1.0\nContent-Length: %lu\n\n%s",
-	// 		strlen(content_buf) + cert_size, content_buf);
-
-	// SSL_write(ssl, obuf, strlen(obuf));
-	// SSL_write(ssl, cert_buf, cert_size);
+	sprintf(obuf, "GET /message HTTP/1.0\nContent-Length: %d\n\n%s", strlen(username), username);
+	SSL_write(ssl, obuf, strlen(obuf));
 
 	// --------- Get server response ---------- //
-	char response_buf[4096];
 
-	fprintf(stdout, "\nSERVER RESPONSE:\n");
+	char response_buf[4096];
 	err = SSL_read(ssl, response_buf, sizeof(response_buf) - 1);
 	response_buf[err] = '\0';
 
 	if (strstr(response_buf, "200 Success")) {
 		printf("Success!\n");
+	
+		// handle case where the response is successful, but there are no new messages to read
+		
+		// if message is available:
+		// parse sender information from request body
+		// parse sender certificate from request body
+		// parse sender message contents from request body
+		
 	} else {
-		printf("Sorry!\n");
+		printf("Sorry, the server couldn't send back any messages at this time.\n");
+		goto CLEANUP;
 	}
 
+	// ---- Verify and decrypt the content that the server returned --- //
+	char *msg_file_path = NULL;    // THIS WILL BE THE PATH OF THE SAVED ENCRYPTED/SIGNED CONTENT OF MESSAGE (from server)
+	char *sender_cert_path = NULL; //  THIS WILL BE A PATH TO WHERE THE SENDER'S CERTIFIFCATE IS AVAILABLE (from server) 
+
+	char verified_msg_path_buf[128];
+	sprintf(verified_msg_path_buf, VERIFIED_ENCRYPTED_MSG_TEMPLATE, username);
+
+	char decrypted_msg_path_buf[128];
+	sprintf(decrypted_msg_path_buf, DECRYPTED_MSG_TEMPLATE, username);
+
+	// Verify the digitally signed message against the sender's certificate
+	if (verify_message(msg_file_path, verified_msg_path_buf, sender_cert_path)) {
+		fprintf(stdout, "Message could not be verified from the sender. Sorry!\n");
+		goto CLEANUP;
+	}
+
+	// Decrypt the message using client's private key
+	if (decrypt_message(verified_msg_path_buf, decrypted_msg_path_buf, 
+			certificate_path, private_key_path)) {
+		fprintf(stdout, "Message from server could not be decrypted. Sorry!\n");
+		goto CLEANUP;
+	}
+
+	// ------- Print out message contents for the user ------ //
+	FILE *fp = fopen(decrypted_msg_path_buf, "r");
+	if (!fp) {
+		fprinf(stderr, "Could not reopen decrypted file to provide content.\n");
+	}
+	
+	fprintf("Here are the contents of your message:\n");
+	while((s = fgetc(fp)) != EOF) {
+      printf("%c", s);
+   	}
+	fclose(fp);
+
 	// ------- Clean Up -------- //
+CLEANUP:
+	remove_temporary_files_from_mailbox(username);
 	SSL_shutdown(ssl);
 	SSL_free(ssl);
 	close(sock);
@@ -164,3 +212,190 @@ int tcp_connection(char *host_name, int port) {
 	return sock;
 }
 
+/**
+ * Verifies that a message has been sent from the intended sender
+ * by checking the public key of the sender against the digitally signed
+ * file content. Sender certificate must be saved to a file identified by sender_cert_path.
+ * 
+ * The verified content will be saved to a file at verified_msg_path.
+ * Returns 0 if succesful, 1 if error
+ * 
+ * Source code derived from openssl demos files provided for project
+ */
+int verify_message(char *msg_file_path, char *verified_msg_path, 
+		char *sender_cert_path) {
+
+    BIO *in = NULL, *out = NULL, *sender = NULL, *tbio = NULL, *cont = NULL;
+    X509_STORE *st = NULL;
+    X509 *ca_cert = NULL;
+	X509 *sender_cert = NULL;
+	STACK_OF(X509) *sender_stack = NULL;
+    CMS_ContentInfo *cms = NULL;
+    OpenSSL_add_all_algorithms();
+    ERR_load_crypto_strings();
+	int err = 1;
+
+    // ------ Set up trusted CA certificate store ------ //
+	// WARNING: TRUSTED_CA is a chain-cert. This may need to be changed
+	// to use the individual intermediate ca certificate instead.
+
+    st = X509_STORE_new();
+    if (!(tbio = BIO_new_file(TRUSTED_CA, "r"))) {
+		fprintf(stderr, "Could not setup trusted CA certificate store\n");
+        goto CLEANUP;
+	}
+    
+    if (!(ca_cert = PEM_read_bio_X509(tbio, NULL, 0, NULL))) {
+		fprintf(stderr, "Could not read X509 cert from CA certificate\n");
+        goto CLEANUP;
+	}
+    if (!X509_STORE_add_cert(st, ca_cert)) {
+		fprintf(stderr, "Could not add certificate to trusted CA store\n");
+        goto CLEANUP;
+	}
+
+	// ------ Read in sender's certificate and save to STACK_OF(X509) ------ //
+
+	if (!(sender = BIO_new_file(sender_cert_path, "rb+"))) {
+		fprintf(stderr, "Could not open sender certificate at %s\n",
+				sender_cert_path);
+		goto CLEANUP;
+	}
+
+	if (!(sender_cert = PEM_read_bio_X509(sender, NULL, 0, NULL))) {
+		fprintf(stderr, "Could not read recipient X509 from sender certificate\n");
+		goto CLEANUP;
+	}
+
+	/* Create sender STACK and add sender cert to it */
+	sender_stack = sk_X509_new_null();
+	if (!sender_stack || !sk_X509_push(sender_stack, sender_cert)) {
+		fprintf(stderr, "Could not add sender cert to certificate stack\n");
+		goto CLEANUP;
+	}
+	
+	// sk_X509_pop_free will free up recipient STACK and its contents so set
+	// sender_cert to NULL so it isn't freed up twice.
+	sender_cert = NULL;
+
+    // ------------ Open message being verified ----------- //
+
+    if (!(in = BIO_new_file(msg_file_path, "r"))) {
+		fprintf(stderr, "Could not read in file content to be decrypted.\n");
+        goto CLEANUP;
+	}
+
+    if (!(cms = SMIME_read_CMS(in, &cont))) {
+		fprintf(stderr, "Could not parse message from CMS");
+        goto CLEANUP;
+	}
+
+	// File to output verified content to */
+    if (!(out = BIO_new_file(verified_msg_path, "w"))) {
+		fprintf(stderr, "Could not open new file to save verified content to.\n");
+		goto CLEANUP;
+	}
+
+	// These settings say: "Please verify the CMS structure against a set of certificates
+	// that are currently in the certificate stack, sender_stack against the known and trusted
+	// cas that I have provided to the trusted CA list, st."
+    if (!CMS_verify(cms, sender_stack, st, cont, out, CMS_NOINTERN)) {
+        fprintf(stderr, "Verification of Sender Failed\n");
+        goto CLEANUP;
+    }
+
+    fprintf(stderr, "Verification of Sender was Successful\n");
+    err = 0;
+
+ CLEANUP:
+    if (err) {
+        fprintf(stderr, "Error Verifying Data\n");
+        ERR_print_errors_fp(stderr);
+    }
+
+    CMS_ContentInfo_free(cms);
+	X509_free(sender_cert);
+	sk_X509_pop_free(sender_stack, X509_free);
+    X509_free(ca_cert);
+    BIO_free(in);
+    BIO_free(out);
+    BIO_free(tbio);
+	BIO_free(sender);
+    return err;
+}
+/**
+ * Decrypts an encrypted message using the client's private key located
+ * at client_pkey_path and the client's public key located at client_cert_path.
+ * 
+ * Function returns 0 on success and 1 on failure
+ * Source code derived from openssl demos files provided for project
+ */
+int decrypt_message(char *encrypted_msg_path, char *decrypted_msg_path, 
+		char *client_cert_path, char *client_pkey_path) {
+    
+	BIO *in = NULL, *out = NULL, *tbio = NULL;
+    X509 *rcert = NULL;
+    EVP_PKEY *rkey = NULL;
+    CMS_ContentInfo *cms = NULL;
+    int err = 1;
+    OpenSSL_add_all_algorithms();
+    ERR_load_crypto_strings();
+
+    // ------ Read in recipient (client) certificate and private key --- //
+    if (!(BIO_new_file(client_cert_path, "r"))) {
+		fprintf(stderr, "Could not access client certificate file\n");
+        goto CLEANUP;
+	}
+
+	if (!(rcert = PEM_read_bio_X509(tbio, NULL, 0, NULL))) {
+		fprintf(stderr, "Could not read in the client's X509 certificate key");
+        goto CLEANUP;
+	}
+
+	// not sure how the private key gets read from BIO in the provided example
+	// so reading the private key separately
+	// skey = PEM_read_bio_PrivateKey(tbio, NULL, 0, NULL);
+	FILE *fp = fopen(client_pkey_path, "rb+");
+	if (!fp || !(rkey = PEM_read_PrivateKey(fp, NULL, 0, NULL))) {
+		fprintf(stderr, "Could not read in private key contents\n");
+		goto CLEANUP;
+	}
+	fclose(fp);
+
+    // ----- Open the content to decrypt and do the decryption ----//
+    if (!(in = BIO_new_file(encrypted_msg_path, "r"))) {
+		fprintf(stderr, "Could not read in encrypted file content\n");
+        goto CLEANUP;
+	}
+
+    if (!(cms = SMIME_read_CMS(in, NULL))) {
+        fprintf(stderr, "Could not parse encrypted content from file\n");
+		goto CLEANUP;
+	}
+
+    if (!(out = BIO_new_file(decrypted_msg_path, "w"))) {
+        fprintf(stderr, "Could not open/create decrypted message content file\n");
+		goto CLEANUP;
+	}
+
+    if (!CMS_decrypt(cms, rkey, rcert, NULL, out, 0)) {
+		fprintf("Error occurred while decrypting S/MIME message\n");
+        goto CLEANUP;
+	}
+    err = 0;
+
+ CLEANUP:
+
+    if (err) {
+        fprintf(stderr, "Error Decrypting Data\n");
+        ERR_print_errors_fp(stderr);
+    }
+
+    CMS_ContentInfo_free(cms);
+    X509_free(rcert);
+    EVP_PKEY_free(rkey);
+    BIO_free(in);
+    BIO_free(out);
+    BIO_free(tbio);
+    return err;
+}
