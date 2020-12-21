@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 #include <termios.h>
@@ -112,4 +113,95 @@ void get_hidden_pw(char *password, int max_len) {
 
 	// go back to the old settings
 	tcsetattr(STDIN_FILENO, TCSANOW, &old_terminal);
+}
+
+/**
+ * Fills buff_path and buff_rcpts buffers with the path of file to be sent 
+ * and lists of rcpts (separated by space) for the message.
+ * Returns 0 if successful, -1 if failure.
+ */
+int get_sendmsg_args(int argc, char *argv[], char buff_path[],
+	char buff_rcpts[], int max_len_path, int max_len_rcpt, int max_len_rcpts){
+
+	memset(&buff_path[0], 0, max_len_path);
+	memset(&buff_rcpts[0], 0, max_len_rcpts);
+	
+	if (argc < 5) {
+		fprintf(stderr, "One or more arguments are missing.\n");
+		return -1;
+	}
+
+	int current_rcpts_size = 0;
+
+	for (int i = 1; i < argc; i++) {
+
+		// check that -f flag is provided as second arg
+		if ((i == 1) & (strncmp(argv[i], "-f", 2) != 0)) {
+			fprintf(stderr, "Unexpected argument order.\n");
+			return -1;
+		}
+		// check that -r flag is provided as 4th arg
+		else if ((i == 3) & (strncmp(argv[i], "-r", 2) != 0)) {
+			fprintf(stderr, "Unexpected argument order.\n");
+			return -1;
+		}
+		// consider the second arg as the file path
+		else if (i == 2) {
+			if (max_len_path < strlen(argv[i])) {
+				fprintf(stderr, "File name of unexpected length.\n");
+				return -1;
+			}
+			memcpy(buff_path, argv[i], strlen(argv[i]));
+			buff_path[strlen(argv[i])] = '\0';
+		}
+		// consider the 4th arg and beyond as recipient usernames
+		else if (i >= 4) {
+			// individual rcpt must be shorter than max_len_rcpt
+			if (max_len_rcpt < strlen(argv[i])) {
+				fprintf(stderr, "Recipient username of unexpected length.\n");
+				return -1;
+			}
+			// total size must be shorter than max_len_rcpts
+			else if (max_len_rcpts < current_rcpts_size + strlen(argv[i]) + 1) {
+				fprintf(stderr, "Total recipients size of unexpected length.\n");
+				return -1;
+			}
+
+			memcpy(&buff_rcpts[current_rcpts_size], argv[i], strlen(argv[i]));
+			current_rcpts_size += strlen(argv[i]);
+			buff_rcpts[current_rcpts_size] = ' ';
+			buff_rcpts[current_rcpts_size] = '\0';
+			current_rcpts_size += 1;
+		}
+	}
+	return 0;
+}
+
+/**
+ * Get all data from a file
+ */
+char* get_file_data(FILE *fp) {
+	char *data = (char*) malloc(sizeof(char) * 1000);
+	data[0] = '\0'; // make null-terminated
+
+	char *line_buf = NULL;
+	ssize_t line_size;
+	size_t line_buf_size = 0;
+	size_t data_size = 0;
+	size_t max_size = 1000;
+
+	while ((line_size = getline(&line_buf, &line_buf_size, fp)) > 0) {
+		char *old = data;
+		data_size += strlen(line_buf);
+		data = realloc(data, 2 * (data_size + data_size));
+		if (data == NULL) {
+			fprintf(stderr, "\nFailed to reallocate data");
+			free(line_buf);
+			free(old);
+			return NULL;
+		}
+		strcat(data, line_buf);
+	}
+	free(line_buf);
+	return data;
 }

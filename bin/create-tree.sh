@@ -38,3 +38,5 @@ done < ../original_hashed_pass.txt
 cp ../bin/server ./server-dir/bin/server
 cp ../bin/getcert ./client-dir/bin/getcert
 cp ../bin/changepw ./client-dir/bin/changepw
+cp ../bin/sendmsg ./client-dir/bin/sendmsg
+cp ../bin/recvmsg ./client-dir/bin/recvmsg

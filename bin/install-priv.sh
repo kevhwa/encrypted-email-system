@@ -7,14 +7,20 @@ dir="$1"
 
 chmod 771 ./$dir/client-dir/bin/getcert
 chmod 771 ./$dir/client-dir/bin/changepw
+chmod 771 ./$dir/client-dir/bin/sendmsg
+chmod 771 ./$dir/client-dir/bin/recvmsg
 
 chown message-client:message-client ./$dir/client-dir/bin/getcert
 chown message-client:message-client ./$dir/client-dir/bin/changepw
+chown message-client:message-client ./$dir/client-dir/bin/sendmsg
+chown message-client:message-client ./$dir/client-dir/bin/recvmsg
 
-# Anyone who uses getcert/changepw will be run as message-client group
+# Anyone who uses getcert/changepw/sendmsg/recvmsg will be run as message-client group
 
 chmod g+s ./$dir/client-dir/bin/getcert
 chmod g+s ./$dir/client-dir/bin/changepw
+chmod g+s ./$dir/client-dir/bin/sendmsg
+chmod g+s ./$dir/client-dir/bin/recvmsg
 
 # Add permissions to mailbox
 

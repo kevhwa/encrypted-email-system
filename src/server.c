@@ -57,8 +57,7 @@ int main(int argc, char **argv) {
 	int sock, rqst;
 
 	// create the SSL context, with option to use authentication
-
-	if (argc > 1 && argv[1] == "-a")
+	if (argc > 1 && strcmp(argv[1], "-a") == 0)
 		ctx = create_ctx_server(CERTIFICATE_FILE, PRIVATE_KEY_FILE, TRUSTED_CA_FILE, ON);
 	else
 		ctx = create_ctx_server(CERTIFICATE_FILE, PRIVATE_KEY_FILE, NULL, OFF);
@@ -67,6 +66,7 @@ int main(int argc, char **argv) {
 	if ((sock = tcp_listen()) < 0) {
 		return 2;
 	}
+
 	fprintf(stdout, "\nServer started!\n");
 
 	for (;;) {
@@ -150,102 +150,124 @@ int main(int argc, char **argv) {
 			goto CLEANUP;
 		}
 
-		if (parse_credentials_from_request_body(
-				request_handler->request_content, uname_buf, pwd_buf,
-				max_auth_len) < 0) {
-			err = SSL_write(ssl, bad_request_resp, strlen(bad_request_resp));
-			goto CLEANUP;
-		}
-
-		if (!check_credential(uname_buf, pwd_buf)) {
-			printf("Authentication failed.\n");
-			err = SSL_write(ssl, unauthorized_resp, strlen(unauthorized_resp));
-			goto CLEANUP;
-		}
-		
-		memset(buf, 0, sizeof(buf));
-		if (request_handler->command == ChangePW) {
-			SSL_read(ssl, buf, sizeof(buf) - 1);
-			if (strlen(buf) < 2) {
+		if (request_handler->command == ChangePW || request_handler->command == GetCert) {
+			if (parse_credentials_from_request_body(
+					request_handler->request_content, uname_buf, pwd_buf,
+					max_auth_len) < 0) {
 				err = SSL_write(ssl, bad_request_resp, strlen(bad_request_resp));
 				goto CLEANUP;
 			}
-		}
 
-		//--- If there are unread messages for client, don't let them change their certificate --- //
-		char path[100];
-		snprintf(path, sizeof(path), "mailboxes/%s", uname_buf);
-		if ((err = awaiting_messages_for_client(path)) != 0) {
-			if (err < 0) {
-				fprintf(stderr, "Error occurred trying to determine unread messages.\n");
-				err = SSL_write(ssl, internal_error_resp, strlen(internal_error_resp));
-				goto CLEANUP;
-			} else {
-				fprintf(stdout, "Client has unread messages; will not change certificate.\n");
-				err = SSL_write(ssl, conflict_resp, strlen(conflict_resp));
+			if (!check_credential(uname_buf, pwd_buf)) {
+				printf("Authentication failed.\n");
+				err = SSL_write(ssl, unauthorized_resp, strlen(unauthorized_resp));
 				goto CLEANUP;
 			}
-		}
+			
+			memset(buf, 0, sizeof(buf));
+			if (request_handler->command == ChangePW) {
+				SSL_read(ssl, buf, sizeof(buf) - 1);
+				if (strlen(buf) < 2) {
+					err = SSL_write(ssl, bad_request_resp, strlen(bad_request_resp));
+					goto CLEANUP;
+				}
+			}
 
-		// --- Passed authentication and OK to change cert. Read in certificate request --- //
-		char cert_buf[4096];
-		int temp = SSL_read(ssl, cert_buf, sizeof(cert_buf) - 1);
-		cert_buf[temp] = '\0';
+			//--- If there are unread messages for client, don't let them change their certificate --- //
+			char path[100];
+			snprintf(path, sizeof(path), "mailboxes/%s", uname_buf);
+			if ((err = awaiting_messages_for_client(path)) != 0) {
+				if (err < 0) {
+					fprintf(stderr, "Error occurred trying to determine unread messages.\n");
+					err = SSL_write(ssl, internal_error_resp, strlen(internal_error_resp));
+					goto CLEANUP;
+				} else {
+					fprintf(stdout, "Client has unread messages; will not change certificate.\n");
+					err = SSL_write(ssl, conflict_resp, strlen(conflict_resp));
+					goto CLEANUP;
+				}
+			}
 
-		// ------------ Save CSR to a CSR file   ----- //
-		memset(path, 0, sizeof(path));
-		X509_REQ *x509_req;
-		snprintf(path, sizeof(path), "mailboxes/%s/%s.csr.pem",
-				uname_buf, uname_buf);
+			// --- Passed authentication and OK to change cert. Read in certificate request --- //
+			char cert_buf[4096];
+			int temp = SSL_read(ssl, cert_buf, sizeof(cert_buf) - 1);
+			cert_buf[temp] = '\0';
 
-		if (!write_x509_req_to_file(cert_buf, path)) {
-			printf("failed to write csr to file");
-			goto CLEANUP;
-		}
+			// ------------ Save CSR to a CSR file   ----- //
+			memset(path, 0, sizeof(path));
+			X509_REQ *x509_req;
+			snprintf(path, sizeof(path), "mailboxes/%s/%s.csr.pem",
+					uname_buf, uname_buf);
 
-		// ----- Read in the CSR as a CSR object ----- //
-		if (!(x509_req = read_x509_req_from_file( path))) {
-			printf("failed to read csr from file");
-			goto CLEANUP;
-		}
+			if (!write_x509_req_to_file(cert_buf, path)) {
+				printf("failed to write csr to file");
+				goto CLEANUP;
+			}
 
-		int res = generate_cert(x509_req, CERTIFICATE_FILE, PRIVATE_KEY_FILE, uname_buf);
-		if (res <= 0) {
-			err = SSL_write(ssl, internal_error_resp, strlen(internal_error_resp));
-			printf("error within generate cert\n");
-			goto CLEANUP;
-		}
+			// ----- Read in the CSR as a CSR object ----- //
+			if (!(x509_req = read_x509_req_from_file( path))) {
+				printf("failed to read csr from file");
+				goto CLEANUP;
+			}
 
-		// --- Read certificate and send to user ---//
-		char read_certbuf[4096];
-		char tmp_buf[100];
-		int read_len = 0;
-		snprintf(tmp_buf, sizeof(tmp_buf), "mailboxes/%s/%s.cert.pem", uname_buf, uname_buf);
+			int res = generate_cert(x509_req, CERTIFICATE_FILE, PRIVATE_KEY_FILE, uname_buf);
+			if (res <= 0) {
+				err = SSL_write(ssl, internal_error_resp, strlen(internal_error_resp));
+				printf("error within generate cert\n");
+				goto CLEANUP;
+			}
 
-		if ((read_len = read_x509_cert_from_file(read_certbuf,
-				sizeof(read_certbuf), tmp_buf)) == 0) {
+			// --- Read certificate and send to user ---//
+			char read_certbuf[4096];
+			char tmp_buf[100];
+			int read_len = 0;
+			snprintf(tmp_buf, sizeof(tmp_buf), "mailboxes/%s/%s.cert.pem", uname_buf, uname_buf);
 
-			err = SSL_write(ssl, internal_error_resp, strlen(internal_error_resp));
-			goto CLEANUP;
-		}
+			if ((read_len = read_x509_cert_from_file(read_certbuf,
+					sizeof(read_certbuf), tmp_buf)) == 0) {
 
-		// --- Write new password to file, if changepw --- //
-		if (request_handler->command == ChangePW) {
-			char path_buf[100];
-			snprintf(path_buf, sizeof(path_buf), "passwords/%s.txt", uname_buf);
-
-			if (!write_new_password(buf, path_buf)) {
-				fprintf(stderr, "Error ocurred writing password");
 				err = SSL_write(ssl, internal_error_resp, strlen(internal_error_resp));
 				goto CLEANUP;
 			}
-		}
-		
-		char content_buf[4096];
-		sprintf(content_buf, success_template, read_len);
 
-		err = SSL_write(ssl, content_buf, strlen(content_buf));
-		err = SSL_write(ssl, read_certbuf, read_len);
+			// --- Write new password to file, if changepw --- //
+			if (request_handler->command == ChangePW) {
+				char path_buf[100];
+				snprintf(path_buf, sizeof(path_buf), "passwords/%s.txt", uname_buf);
+
+				if (!write_new_password(buf, path_buf)) {
+					fprintf(stderr, "Error ocurred writing password");
+					err = SSL_write(ssl, internal_error_resp, strlen(internal_error_resp));
+					goto CLEANUP;
+				}
+			}
+			
+			char content_buf[4096];
+			sprintf(content_buf, success_template, read_len);
+
+			err = SSL_write(ssl, content_buf, strlen(content_buf));
+			err = SSL_write(ssl, read_certbuf, read_len);
+		}
+
+		else if (request_handler->command == UserCerts) {
+
+			// handle request to send back certificates for a set of users
+
+//			size_t msg_size = 10000
+//			char *certs_body = (char*) malloc(msg_size * sizeof(char));
+//			memset(certs_body, '\0', sizeof(certs_body));
+//			char *recipient;
+//			do {
+//				recipient = strtok(str, " ");
+//				if (recipient == NULL)
+//					break;
+//
+//			} while (1);
+		}
+		else if (request_handler->command == SendMsg) {
+		}
+		else if (request_handler->command == RecvMsg) {
+		}
 
 		CLEANUP: 
 		SSL_shutdown(ssl);
@@ -587,6 +609,7 @@ RequestHandler* handle_recvd_msg(char *buf) {
 	char *changepw = "POST /changepw HTTP/1.0";
 	char *sendmsg = "POST /sendmsg HTTP/1.0";
 	char *recvmsg = "POST /recvmsg HTTP/1.0";
+	char *usercerts = "GET /certificates HTTP/1.0";
 
 	RequestHandler *request_handler = init_request_handler();
 	if (!request_handler) {
@@ -612,12 +635,15 @@ RequestHandler* handle_recvd_msg(char *buf) {
 	} else if ((strncmp(changepw, line, strlen(changepw) - 3) == 0)
 			&& (strlen(line) == strlen(changepw))) {
 		request_handler->command = ChangePW;
-	} else if ((strncmp(changepw, line, strlen(sendmsg) - 3) == 0)
+	} else if ((strncmp(sendmsg, line, strlen(sendmsg) - 3) == 0)
 			&& (strlen(line) == strlen(sendmsg))) {
 		request_handler->command = SendMsg;
-	} else if ((strncmp(changepw, line, strlen(recvmsg) - 3) == 0)
+	} else if ((strncmp(recvmsg, line, strlen(recvmsg) - 3) == 0)
 			&& (strlen(line) == strlen(recvmsg))) {
 		request_handler->command = RecvMsg;
+	} else if ((strncmp(usercerts, line, strlen(usercerts) - 3) == 0)
+			&& (strlen(line) == strlen(usercerts))) {
+		request_handler->command = UserCerts;
 	}
 
 	// invalid request; could not match the endpoint requested to known endpoint
