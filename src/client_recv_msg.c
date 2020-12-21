@@ -43,7 +43,11 @@ int main(int argc, char **argv) {
 	char private_key_path[256];
 	sprintf(certificate_path, CERT_LOCATION_TEMPLATE, username, username);
 	sprintf(private_key_path, PRIVATE_KEY_TEMPLATE, username, username);
-	ctx = create_ctx_client(certificate_path, private_key_path, TRUSTED_CA, 1);
+	if (!(ctx = create_ctx_client(certificate_path, private_key_path, TRUSTED_CA, 1))) {
+		fprintf(stderr, "Please make sure that you have a private key and certificate "
+				"before continuing. You can generate it using the 'getcert' program.\n");
+		exit(2);
+	}
 
 	// create the TCP socket
 	if ((sock = tcp_connection("localhost", SERVER_PORT)) < 0) {

@@ -35,8 +35,17 @@ SSL_CTX* create_ctx_client(char *certificate_file, char *private_key_file,
 	SSL_CTX_set_verify_depth(ctx, 1);
 
 	if (have_cert) {
-		SSL_CTX_use_certificate_file(ctx, certificate_file, SSL_FILETYPE_PEM);
-		SSL_CTX_use_PrivateKey_file(ctx, private_key_file, SSL_FILETYPE_PEM);
+		if (SSL_CTX_use_certificate_file(ctx, certificate_file, SSL_FILETYPE_PEM) != 1) {
+			SSL_CTX_free(ctx);
+			printf("Could not load certificate file.\n");
+			return NULL;
+		}
+		if (SSL_CTX_use_PrivateKey_file(ctx, private_key_file, SSL_FILETYPE_PEM) != 1) {
+			SSL_CTX_free(ctx);
+			printf("Could not load private key file.\n");
+			return NULL;
+		}
+
 	}
 	return ctx;
 }

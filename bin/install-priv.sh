@@ -31,6 +31,14 @@ do
     chmod 770 ./$dir/client-dir/mailboxes/$mailbox
 done
 
+# Add permissions for current user as well
+
+current_user=`who am i | awk '{print $1}'`
+chown $current_user:message-client ./$dir/client-dir/mailboxes/$current_user
+chmod 770 ./$dir/client-dir/mailboxes/$current_user
+
+# Change permissions for server dir and rootca dir
+
 chown server:server ./$dir/server-dir
 chmod 700 ./$dir/server-dir
 
