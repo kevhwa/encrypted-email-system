@@ -19,13 +19,12 @@
 #include "user_io.h"
 #include "create_ctx.h"
 #include "server.h"
+#include "request_handler.h"
 
 #define AUTH_PORT 8081
 #define NO_AUTH_PORT 8080
 #define ON  1
 #define OFF 0
-#define BAD_REQUEST 400
-#define NOT_FOUND 404
 #define CERTIFICATE_FILE "ca/certs/ca-chain.cert.pem"
 #define TRUSTED_CA_FILE "ca/certs/ca-chain.cert.pem"
 #define PRIVATE_KEY_FILE "ca/private/intermediate.key.pem"
@@ -39,9 +38,6 @@ const char *success_template = "HTTP/1.0 200 Success\nContent-Length: %d\n\n";
 const char *success_template_with_content = "HTTP/1.0 200 Success\nContent-Length: %d\n\n%s";
 
 int tcp_listen(int port);
-RequestHandler* init_request_handler();
-RequestHandler* handle_recvd_msg(char *buf);
-void free_request_handler(RequestHandler *request_handler);
 int check_credential(char *username, char *submitted_password);
 int parse_credentials_from_request_body(char *request_body, char uname[],
 		char pwd[], int buf_len);
@@ -80,6 +76,11 @@ int main(int argc, char **argv) {
 		return 2;
 	}
 
+	// set socket timeout
+	struct timeval tv;
+	tv.tv_sec = 5;
+	tv.tv_usec = 0;
+
 	fprintf(stdout, "\nServer started!\n");
 
 	for (;;) {
@@ -93,6 +94,10 @@ int main(int argc, char **argv) {
 		}
 		fprintf(stdout, "Connection from %x, port %x\n",
 				client_addr.sin_addr.s_addr, client_addr.sin_port);
+
+		if (setsockopt(rqst, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv) != 0) {
+			fprintf(stdout, "Error setting timeout\n");
+		}
 
 		sbio = BIO_new_socket(rqst, BIO_NOCLOSE);
 		ssl = SSL_new(ctx);
@@ -143,14 +148,13 @@ int main(int argc, char **argv) {
 		char buf[4096];
 		err = SSL_read(ssl, buf, sizeof(buf) - 1);
 		buf[err] = '\0';
-		fprintf(stdout, "Received %d chars of content:\n---\n%s----\n", err,
-				buf);
+		fprintf(stdout, "Received %d chars of content:\n---\n%s----\n", err, buf);
+		RequestHandler *request_handler = handle_recvd_msg(buf);
 
 		// --- Validate request and send resp back to the SSL client ---
 		int max_auth_len = 20;
 		char uname_buf[max_auth_len];
 		char pwd_buf[max_auth_len];
-		RequestHandler *request_handler = handle_recvd_msg(buf);
 
 		if (!request_handler) {
 			err = SSL_write(ssl, internal_error_resp, strlen(internal_error_resp));
@@ -267,31 +271,49 @@ int main(int argc, char **argv) {
 			char certs_recpts[10][20] = {{'\0'}};
 			int pos = 0;
 	
-			char* recipient = strtok(request_handler->request_content, " ");
-			int no_recpts = 0;
+			char* content_copy = malloc(strlen(request_handler->request_content) + 1);
+			sprintf(content_copy, "%s", request_handler->request_content);
 
+			char* recipient = strtok(content_copy, " ");
+			int no_recpts = 0;
+			int recipient_exists;
 			while (recipient != NULL) {
 				if (no_recpts >= 10) {
 					fprintf(stderr, "Too many recipients received, ending session...\n");
 					err = SSL_write(ssl, bad_request_resp, strlen(bad_request_resp));
 					goto CLEANUP;
 				}
-				// is this the maximum username length?
+				// recipient should not exceed max length acceptable length
 				if (strlen(recipient) >= 19) {
 					fprintf(stderr, "Skipping recipient %s of invalid length\n", recipient);
 					recipient = strtok(NULL, " ");
 					continue;
 				}
+				
+				// remove duplicate recipients
+				recipient_exists = 0;
+				for (int k = 0; k < no_recpts; k++) {
+					if (strcmp(certs_recpts[k], recipient) == 0) {
+						recipient_exists = 1;
+						break;
+					}
+				}
+				if (recipient_exists) {
+					fprintf(stdout, "Skipping duplicate recipient %s\n", recipient);
+					recipient = strtok(NULL, " ");
+					continue;
+				}
+
 				fprintf(stdout, "Added recipient %s\n", recipient);
 				strcpy(certs_recpts[pos], recipient);
 				pos++;
 				no_recpts++;
 				recipient = strtok(NULL, " ");
 			}
-			
+			free(content_copy);
 			if (no_recpts == 0) {
 				// no recipients
-				fprintf(stderr, "No recipients found, ending session...\n");
+				fprintf(stderr, "No valid recipients found, ending session...\n");
 				err = SSL_write(ssl, bad_request_resp, strlen(bad_request_resp));
 				goto CLEANUP;
 			}
@@ -326,16 +348,15 @@ int main(int argc, char **argv) {
 					cert_data = (char*) malloc(sizeof(char) * (file_size + 1));
 					fread(cert_data, sizeof(char), file_size, cert_fp);
 					cert_data[file_size] = '\0';
-					
-					new_size = response_size + strlen(certs_recpts[i]) + file_size + cert_separator_len + 1;
-					if (max_size <= new_size) {
-						response_body = realloc(response_body, 2 * new_size);
-						max_size = 2 * new_size;
-						if (!response_body) {
-							free(response_body);
-							fprintf(stderr, "realloc failed\n");
-							exit(1);
-						}
+				}
+				new_size = response_size + strlen(certs_recpts[i]) + strlen(cert_data) + cert_separator_len + 1;
+				if (max_size <= new_size) {
+					response_body = realloc(response_body, 2 * new_size);
+					max_size = 2 * new_size;
+					if (!response_body) {
+						free(response_body);
+						fprintf(stderr, "realloc failed\n");
+						exit(1);
 					}
 				}
 				
@@ -353,6 +374,7 @@ int main(int argc, char **argv) {
 			sprintf(content_buf, success_template, response_size);
 			err = SSL_write(ssl, content_buf, strlen(content_buf));
 			err = SSL_write(ssl, response_body, response_size);
+			fprintf(stdout, "Sent certificates:\n---\n%s%s\n---\n", content_buf, response_body);
 			free(response_body);
 
 			// --- Receive SendMsg Commands ---//
@@ -373,6 +395,7 @@ int main(int argc, char **argv) {
 				do {
 					memset(buf, '\0', sizeof(buf));
 					err = SSL_read(ssl, buf, sizeof(buf) - 1);
+					fprintf(stdout, "Received %d chars of content:\n---\n%s----\n", err, buf);
 					if (err <= 0) break;
 					if (body_size <= received + err) {
 						body = realloc(body, 2 * (received + err));
@@ -386,7 +409,7 @@ int main(int argc, char **argv) {
 					received += err;
 				} while (1);
 				
-				fprintf(stdout, "Received %d chars of content:\n---\n%s----\n", err, body);
+				fprintf(stdout, "Received %d chars of content total:\n---\n%s----\n", err, body);
 				sendmsg_handler = handle_recvd_msg(body);
 				if (!sendmsg_handler || sendmsg_handler->command != SendMsg) {
 					free_request_handler(sendmsg_handler);
@@ -842,105 +865,6 @@ int generate_cert(X509_REQ *x509_req, const char *p_ca_path,
 	return success;
 }
 
-
-/**
- * Extracts the command and content from an incoming request
- * into a RequestHandler struct.
- */
-RequestHandler* handle_recvd_msg(char *buf) {
-
-	char *getcert = "POST /getcert HTTP/1.0";
-	char *changepw = "POST /changepw HTTP/1.0";
-	char *sendmsg = "POST /sendmsg HTTP/1.0";
-	char *usercerts = "GET /certificates HTTP/1.0";
-	char *recvmsg = "GET /message HTTP/1.0";
-
-	// char *sendmsg_get = "GET /sendmsg HTTP/1.0";
-	// char *sendmsg_post = "POST /sendmsg HTTP/1.0";
-
-	struct RequestHandler *request_handler = init_request_handler();
-	if (!request_handler) {
-		fprintf(stderr, "Could not handle received message.\n");
-		return NULL;
-	}
-
-	char buf_cpy[strlen(buf) + 1];
-	strcpy(buf_cpy, buf);
-	buf_cpy[strlen(buf)] = '\0';
-
-	// get first line of message
-	char *line = strtok(buf_cpy, "\n");
-	if (line == NULL) {
-		request_handler->status_code = BAD_REQUEST;
-		return request_handler;
-	}
-
-	// http version can be anything; just make sure that the rest matches
-	if ((strncmp(getcert, line, strlen(getcert) - 3) == 0)
-			&& (strlen(line) == strlen(getcert))) {
-		request_handler->command = GetCert;
-	} else if ((strncmp(changepw, line, strlen(changepw) - 3) == 0)
-			&& (strlen(line) == strlen(changepw))) {
-		request_handler->command = ChangePW;
-	} else if ((strncmp(sendmsg, line, strlen(sendmsg) - 3) == 0)
-			&& (strlen(line) == strlen(sendmsg))) {
-		request_handler->command = SendMsg;
-	} else if ((strncmp(recvmsg, line, strlen(recvmsg) - 3) == 0)
-			&& (strlen(line) == strlen(recvmsg))) {
-		request_handler->command = RecvMsg;
-	} else if ((strncmp(usercerts, line, strlen(usercerts) - 3) == 0)
-			&& (strlen(line) == strlen(usercerts))) {
-		request_handler->command = UserCerts;
-	}
-
-	// invalid request; could not match the endpoint requested to known endpoint
-	if (request_handler->command == InvalidCommand) {
-		request_handler->status_code = NOT_FOUND;
-		return request_handler;
-	}
-
-	// get second line
-	line = strtok(NULL, "\n");
-
-	char *content_length_headername = "content-length:";
-	if (line == NULL
-			|| strncasecmp(content_length_headername, line,
-					strlen(content_length_headername)) != 0) {
-		request_handler->status_code = BAD_REQUEST;
-		return request_handler;
-	}
-	char *content_length_val = strchr(line, ':');
-
-	if (content_length_val == NULL) {
-		request_handler->status_code = BAD_REQUEST;
-		return request_handler;
-	}
-
-	int content_length = 0;
-	// handle optional whitespace between : and the length value
-	if (*(content_length_val + 1) == ' ') {
-		content_length = atoi(content_length_val + 2);
-	} else {
-		content_length = atoi(content_length_val + 1);
-	}
-
-	// get rest of the request
-	// the first character should be a newline to indicate end of header section
-	char *rest_of_req = strtok(NULL, "");
-	if (rest_of_req == NULL || strncmp("\n", rest_of_req, 1)) {
-		request_handler->status_code = BAD_REQUEST;
-		return request_handler;
-	}
-
-	char *body = malloc(sizeof(char) * (content_length + 1));
-	memset(body, 0, sizeof(content_length) + 1);
-	strncpy(body, rest_of_req + 1, content_length);
-	body[content_length] = '\0';
-
-	request_handler->request_content = body;
-	return request_handler;
-}
-
 /**
  * Checks a users submitted username and password against the username/password
  * that is stored for the user in a file on the server
@@ -1028,40 +952,6 @@ int parse_credentials_from_request_body(char *request_body, char uname[],
 }
 
 /**
- * Creates request handler to contain parsed content of request.
- */
-RequestHandler* init_request_handler() {
-
-	RequestHandler *request_handler;
-
-	if (!(request_handler = (RequestHandler*) malloc(sizeof(RequestHandler)))) {
-		fprintf(stderr, "Could not create request handler for request.\n");
-		return NULL;
-	}
-	request_handler->command = InvalidCommand;
-	request_handler->status_code = 200;
-	request_handler->request_content = NULL;
-	request_handler->response_content = NULL;
-	return request_handler;
-}
-
-/**
- * Frees allocated request handler struct.
- */
-void free_request_handler(RequestHandler *request_handler) {
-	if (request_handler == NULL) {
-		return;
-	}
-	if (request_handler->request_content != NULL) {
-		free(request_handler->request_content);
-	}
-	if (request_handler->response_content != NULL) {
-		free(request_handler->response_content);
-	}
-	free(request_handler);
-}
-
-/**
  * Saves message from client in SendMsg request.
  */
 int save_client_msg(char* request_body) {
@@ -1085,11 +975,11 @@ int save_client_msg(char* request_body) {
 		return -1;
 	}
 
-	fwrite(fp, 1, strlen(sender), sender);
-	fwrite(fp, 1, 1, "\n");
+	fwrite(sender, 1, strlen(sender), fp);
+	fwrite("\n", 1, 1, fp);
 	// write rest of the encrypted message
 	line = strtok(NULL, "");
-	fwrite(fp, 1, strlen(line), line);
+	fwrite(line, 1, strlen(line), fp);
 	fclose(fp);
 	fprintf(stdout, "Saved encrypted message to path %s", path);
 	free(recipient);

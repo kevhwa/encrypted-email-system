@@ -15,14 +15,16 @@
 #include <openssl/x509.h>
 #include <openssl/cms.h>
 #include <dirent.h>
+#include <sys/time.h>
 
 #include "create_ctx.h"
 #include "user_io.h"
-#include "custom_utils.c"
+#include "custom_utils.h"
+#include "request_handler.h"
 
 #define h_addr h_addr_list[0] /* for backward compatibility */
 #define TRUSTED_CA "trusted_ca/ca-chain.cert.pem"
-#define SERVER_PORT 8081
+#define SERVER_PORT 8080
 #define CERT_LOCATION_TEMPLATE "mailboxes/%s/%s.cert.pem"
 #define PRIVATE_KEY_TEMPLATE "mailboxes/%s/%s.private.key"
 #define ENCRYPTED_MSG_TEMPLATE "mailboxes/%s/tmp_encrypted_msg.txt"
@@ -31,7 +33,6 @@
 
 int tcp_connection(char *host_name, int port);
 void print_usage_information();
-char* receive_ssl_response(SSL *ssl);
 CertificatesHandler* parse_certificates(char* body);
 void free_certificates_handler(CertificatesHandler* certificates_handler);
 int encrypt_message(char *msg_path, char *rcpt_cert_path, char *encrypted_msg_path);
@@ -44,12 +45,13 @@ int main(int argc, char **argv) {
 	SSL_CTX *ctx;
 	int sock;
 
+	char *username = "addleness";
 	// figure out who the user is so that their certificate and key can be configured
-	char *username;
-	if (!(username = getlogin())) {
-		printf("Failed to determine identify of user.\n");
-		exit(1);
-	}
+	// char *username;
+	// if (!(username = getlogin())) {
+	// 	printf("Failed to determine identify of user.\n");
+	// 	exit(1);
+	// }
 
 	char certificate_path[256];
 	char private_key_path[256];
@@ -62,7 +64,7 @@ int main(int argc, char **argv) {
 		exit(2);
 	}
 
-	int MAX_RCPTS_LENGTH = 190;
+	int MAX_RCPTS_LENGTH = 200;
 	int MAX_PATH_LENGTH = 50;
 
 	char path[MAX_PATH_LENGTH];
@@ -85,6 +87,14 @@ int main(int argc, char **argv) {
 	if ((sock = tcp_connection("localhost", SERVER_PORT)) < 0) {
 		fprintf(stdout, "Could not create TCP socket...\n");
 		return 2;
+	}
+
+	// set socket timeout
+	struct timeval tv;
+	tv.tv_sec = 5;
+	tv.tv_usec = 0;
+	if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv) != 0) {
+		fprintf(stdout, "Error setting timeout\n");
 	}
 
 	// connect the SSL socket
@@ -137,8 +147,8 @@ int main(int argc, char **argv) {
 
 	// -------- Provide content to server -------- //
 	char obuf[4096];
-	sprintf(obuf, "GET /certificates HTTP/1.0\nContent-Length: %lu\n\n%s",
-			strlen(rcpts), rcpts);
+	sprintf(obuf, "GET /certificates HTTP/1.0\nContent-Length: %lu\n\n%s\n",
+			strlen(rcpts) + 1, rcpts);
 
 	SSL_write(ssl, obuf, strlen(obuf));
 
@@ -176,12 +186,12 @@ int main(int argc, char **argv) {
 			}
 			free_certificates_handler(certs_handler);
 		} else {
-			printf("Could not parse certificates in response "
-					"message received from server.\n");
+			printf("Could not parse certificates in response message received from server.\n");
+			goto CLEANUP;
 		}
 		free(server_response);
 	} else {
-		printf("Could not receive recipient certificates.\n");
+		printf("Did not receive recipient certificates.\n");
 		goto CLEANUP;
 	}
 
@@ -470,45 +480,6 @@ void print_usage_information() {
 					"* [-f] a valid path for the file to be sent\n"
 					"* [-r] a list of recipient usernames for the message (maximum 10)\n"
 					"Example usage: sendmsg -f ./test.txt -r recpt1 recpt2 recpt3\n\n");
-}
-
-/**
- * Receives an HTTP request using SSL_read.
- * Adapted from: https://stackoverflow.com/questions/38714363/read-html-response-using-ssl-read-in-c-http-1-0
- */
-char* receive_ssl_response(SSL *ssl) {
-	int body_size = 10000;
-	char *body = (char*) malloc(body_size * sizeof(char));
-	if (body == NULL) {
-		return NULL;
-	}
-	memset(body, '\0', body_size);
-
-	char buf[4096];
-	int err = SSL_read(ssl, buf, sizeof(buf) - 1);
-	buf[err] = '\0';
-	if (!strstr(buf, "200 Success")) {
-		return NULL;
-	}
-
-	int received = 1;
-	do {
-		memset(buf, '\0', sizeof(buf));
-		err = SSL_read(ssl, buf, sizeof(buf) - 1);
-		if (err <= 0)
-			break;
-		if (body_size <= received + err) {
-			body = realloc(body, 2 * (received + err));
-			body_size = 2 * (received + err);
-			if (!body) {
-				free(body);
-				return NULL;
-			}
-		}
-		strcat(body, buf);
-		received += err;
-	} while (1);
-	return body;
 }
 
 /**
