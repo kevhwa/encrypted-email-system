@@ -27,6 +27,12 @@ typedef struct request_handler {
 	char *response_content;
 } RequestHandler;
 
+typedef struct certificates_handler {
+	int num;
+	char** certificates;
+	char** recipients;
+} CertificatesHandler;
+
 int save_client_msg(char* request_body);
 
 RequestHandler* handle_recvd_msg(char *buf);
@@ -35,6 +41,6 @@ RequestHandler* init_request_handler();
 
 void free_request_handler(RequestHandler *request_handler);
 
-char* receive_ssl_response(SSL *ssl);
+char* receive_ssl_response(SSL *ssl, char* expected_header_line);
 
 #endif /* SRC_REQUEST_HANDLER_H_ */

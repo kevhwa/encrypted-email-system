@@ -29,7 +29,8 @@
 #define PRIVATE_KEY_TEMPLATE "mailboxes/%s/%s.private.key"
 #define ENCRYPTED_MSG_TEMPLATE "mailboxes/%s/tmp_encrypted_msg.txt"
 #define SIGNED_MSG_TEMPLATE "mailboxes/%s/tmp_signed_msg.txt"
-#define RECIPIENT_CERT_TEMPLATE "mailboxes/%s/tmp_%s.pem"
+#define RECIPIENT_CERT_TEMPLATE "mailboxes/%s/tmp_%s.cert.pem"
+#define MAX_MAIL_SIZE 4096
 
 int tcp_connection(char *host_name, int port);
 void print_usage_information();
@@ -157,7 +158,7 @@ int main(int argc, char **argv) {
 	// --------- Get server response ---------- //
 
 	printf("Ready to receive server response...\n");
-	char *server_response = receive_ssl_response(ssl);
+	char *server_response = receive_ssl_response(ssl, "200 Response");
 	CertificatesHandler *certs_handler = NULL;
 
 	if (server_response) {
@@ -184,11 +185,10 @@ int main(int argc, char **argv) {
 					snprintf(path_buf, sizeof(path_buf), RECIPIENT_CERT_TEMPLATE,
 							username, certs_handler->recipients[i]);
 
-					tmpfile = fopen(path_buf, "w");
+					tmpfile = fopen(path_buf, "wb+");
 					fwrite(certs_handler->certificates[i], sizeof(char),
-							sizeof(certs_handler->certificates[i]), tmpfile);
+							strlen(certs_handler->certificates[i]), tmpfile);
 					fclose(tmpfile);
-					
 				}
 			}
 		} else {
@@ -262,7 +262,6 @@ int main(int argc, char **argv) {
 		//
 		// sender 
 		// recipient
-
 		char content_buf[256 + n_bytes];
 		int body_len = strlen(certs_handler->recipients[i]) + strlen(username) 
 			+ strlen(file_buf) + 2;
@@ -275,6 +274,7 @@ int main(int argc, char **argv) {
 		SSL_write(ssl, content_buf, strlen(content_buf));
 
 		// --------- Get server response to request to sendmsg ---------- //
+
 		char response_buf[4096];
 		err = SSL_read(ssl, response_buf, sizeof(response_buf) - 1);
 		response_buf[err] = '\0';
@@ -286,7 +286,6 @@ int main(int argc, char **argv) {
 			printf("Sorry, an error occurred in sending your message "
 					"to %s.\n", certs_handler->recipients[i]);
 		}
-		remove_temporary_files_from_mailbox(username);
 	}
 	char end_buf[4096];
 	sprintf(end_buf, "POST /sendmsg HTTP/1.0\nContent-Length: %d\n\n", 0);
@@ -294,6 +293,7 @@ int main(int argc, char **argv) {
 
 	// ------- Clean Up -------- //
 	CLEANUP:
+	// remove_temporary_files_from_mailbox(username);
 	free_certificates_handler(certs_handler);
 	SSL_shutdown(ssl);
 	SSL_free(ssl);
@@ -431,7 +431,7 @@ int encrypt_message(char *msg_path, char *rcpt_cert_path, char *encrypted_msg_pa
 	printf("Attempting to encrypt message\n");
 
 	/* Read in recipient certificate */
-	if (!(BIO_new_file(rcpt_cert_path, "rb+"))) {
+	if (!(tbio = BIO_new_file(rcpt_cert_path, "rb+"))) {
 		fprintf(stderr, "Could not open recipient certificate at %s\n",
 				rcpt_cert_path);
 		goto err;
@@ -443,6 +443,8 @@ int encrypt_message(char *msg_path, char *rcpt_cert_path, char *encrypted_msg_pa
 		fprintf(stderr, "Could not read recipient X509 from TBIO\n");
 		goto err;
 	}
+
+	// PEM_open_X509(fp, )
 
 	/* Create recipient STACK and add recipient cert to it */
 	recips = sk_X509_new_null();

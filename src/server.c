@@ -28,6 +28,7 @@
 #define CERTIFICATE_FILE "ca/certs/ca-chain.cert.pem"
 #define TRUSTED_CA_FILE "ca/certs/ca-chain.cert.pem"
 #define PRIVATE_KEY_FILE "ca/private/intermediate.key.pem"
+#define MAX_MAIL_SIZE 4096
 
 const char *bad_request_resp = "HTTP/1.0 400 Bad Request\nContent-Length: 0\n\n";
 const char *not_found_resp = "HTTP/1.0 404 Not Found\nContent-Length: 0\n\n";
@@ -387,56 +388,21 @@ int main(int argc, char **argv) {
 			free(response_body);
 
 			// --- Receive SendMsg Commands ---//
-			RequestHandler* sendmsg_handler;
 			while (1) {
-				char buf[4096];
-				int body_size = 10000;
-
-				char *body = (char*) malloc(body_size * sizeof(char));
+				char* body = receive_ssl_response(ssl, "POST /sendmsg HTTP/1.0");
 				if (body == NULL) {
-					fprintf(stderr, "body malloc failed\n");
-					exit(1);
-				}
-				memset(body, '\0', body_size);
-
-				int received = 1;
-				int err;
-				do {
-					memset(buf, '\0', sizeof(buf));
-					err = SSL_read(ssl, buf, sizeof(buf) - 1);
-					fprintf(stdout, "Received %d chars of content:\n---\n%s----\n", err, buf);
-					if (err <= 0) break;
-					if (body_size <= received + err) {
-						body = realloc(body, 2 * (received + err));
-						if (!body) {
-							free(body);
-							exit(1);
-						}
-						body_size = 2 * (received + err);
-					}
-					strcat(body, buf);
-					received += err;
-				} while (1);
-				
-				fprintf(stdout, "Received %d chars of content total:\n---\n%s----\n", err, body);
-				sendmsg_handler = handle_recvd_msg(body);
-				if (!sendmsg_handler || sendmsg_handler->command != SendMsg) {
-					free_request_handler(sendmsg_handler);
 					err = SSL_write(ssl, bad_request_resp, strlen(bad_request_resp));
 					goto CLEANUP;
 				}
-				if (strlen(sendmsg_handler->request_content) == 0) {
+				if (strlen(body) == 0) {
 					break;
 				}
-				if (save_client_msg(sendmsg_handler->request_content) == 0) {
-					sprintf(content_buf, success_template, 0);
+				if (0 == save_client_msg(body)) {
 					err = SSL_write(ssl, content_buf, strlen(content_buf));
 				} else {
 					sprintf(content_buf, internal_error_resp, 0);
 					err = SSL_write(ssl, content_buf, strlen(content_buf));
 				}
-				free_request_handler(sendmsg_handler);
-				free(body);
 			}
 		}
 		else if (request_handler->command == SendMsg) {
@@ -445,7 +411,6 @@ int main(int argc, char **argv) {
 			goto CLEANUP;
     	}
 		else if (request_handler->command == RecvMsg) {
-
 			// client making request is only content in request body; if request
 			// body is too long, this doesn't make sense; usernames are always < 20 chars
 			char *requesting_client = request_handler->request_content;
@@ -990,7 +955,7 @@ int save_client_msg(char* request_body) {
 	line = strtok(NULL, "");
 	fwrite(line, 1, strlen(line), fp);
 	fclose(fp);
-	fprintf(stdout, "Saved encrypted message to path %s", path);
+	fprintf(stdout, "Saved encrypted message to file %s\n", path);
 	free(recipient);
 	free(sender);
 	return 0;

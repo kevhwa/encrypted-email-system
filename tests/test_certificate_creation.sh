@@ -48,3 +48,7 @@ echo -e "\n***9. Attemping to run getcert executable without the correct argumen
 echo -e "***10. Attemping to run changepw executable without the correct arguments... This should report correct usage.***\n"
 
 ./bin/changepw -k bad
+
+echo -e "Clean Up: Resetting user's credentials to their original content\n"
+
+echo "testuser" | ./bin/changepw -u $USER -p tester

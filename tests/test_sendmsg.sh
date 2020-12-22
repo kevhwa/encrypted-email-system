@@ -10,6 +10,7 @@ cd $dir/client-dir
 
 echo -e "\n**** Creating certificates for several mailbox users for testing ****\n"
 
+./bin/getcert -u $USER -p testuser
 ./bin/getcert -u addleness -p Cardin_pwns
 ./bin/getcert -u analects -p pickerel_symbiosis
 ./bin/getcert -u dysphasia -p equably_undies

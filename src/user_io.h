@@ -1,12 +1,6 @@
 #ifndef SRC_USER_IO_H_
 #define SRC_USER_IO_H_
 
-typedef struct certificates_handler {
-	int num;
-	char** certificates;
-	char** recipients;
-} CertificatesHandler;
-
 int get_username_password(int argc, char *argv[], char buff_pass[],
 		char buff_user[], int max_len);
 

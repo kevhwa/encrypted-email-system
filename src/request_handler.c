@@ -61,9 +61,6 @@ RequestHandler* handle_recvd_msg(char *buf) {
 	char *usercerts = "GET /certificates HTTP/1.0";
 	char *recvmsg = "GET /message HTTP/1.0";
 
-	// char *sendmsg_get = "GET /sendmsg HTTP/1.0";
-	// char *sendmsg_post = "POST /sendmsg HTTP/1.0";
-
 	RequestHandler *request_handler = init_request_handler();
 	if (!request_handler) {
 		fprintf(stderr, "Could not handle received message.\n");
@@ -151,7 +148,7 @@ RequestHandler* handle_recvd_msg(char *buf) {
 /**
  * Receives an HTTP response body using SSL_read.
  */
-char* receive_ssl_response(SSL *ssl) {
+char* receive_ssl_response(SSL *ssl, char* expected_header_line) {
 
 	char buf[4096];
 	int err = SSL_read(ssl, buf, sizeof(buf) - 1);
@@ -165,11 +162,10 @@ char* receive_ssl_response(SSL *ssl) {
 		return NULL;
 	}
 	strcpy(header, buf);
-	
 
 	// if server response not successful, return nothing
 	char* line = strtok(header, "\n");
-	if (!strstr(line, "200 Success")) {
+	if (!strstr(line, expected_header_line)) {
 		free(header);
 		return NULL;
 	}
@@ -202,7 +198,6 @@ char* receive_ssl_response(SSL *ssl) {
 		return NULL;
 	}
 	memset(body, '\0', content_length + 1);
-
 	int received = 0;
 
 	printf("Ready to receive server certificate content...\n");

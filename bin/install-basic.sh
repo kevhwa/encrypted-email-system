@@ -8,6 +8,7 @@ dir="$1"
 [ $# -eq 0 ] && { echo "Usage: $0 dir-name"; exit 1; }
 
 # Create the tree
+rm -rf $dir
 ./bin/create-tree.sh $dir 
 
 # Create Root and Intermediate CA
