@@ -30,7 +30,7 @@ int get_username_password(int argc, char *argv[], char buff_pass[],
 	if (strlen(buff_pass) == 0) {
 		// format a message
 		char msg_buf[100];
-		sprintf(msg_buf, "Please provide your password (less than %s characters): ", max_len);
+		sprintf(msg_buf, "Please provide your password (less than %d characters): ", max_len);
 		get_hidden_pw(msg_buf, buff_pass, max_len);
 	}
 	return 0;
@@ -91,7 +91,7 @@ void get_hidden_pw(char *msg, char *password, int max_len) {
 	static struct termios new_terminal;
 
 	memset(password, 0, max_len);
-	fprintf(stdout, msg);
+	fprintf(stdout, "%s", msg);
 
 	// get settings of the actual terminal
 	tcgetattr(STDIN_FILENO, &old_terminal);
