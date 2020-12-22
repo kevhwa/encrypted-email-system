@@ -46,7 +46,7 @@ $ ./bin/server -a
 
 ### Run `getcert`
 
-With the server already started, in a separate shell, run:
+In order to use either `sendmsg` or `recvmsg`, you'll first need a certificate. With the server already started, in a separate shell, run:
 ```
 $ cd tree/client-dir
 $ ./bin/getcert -u username -p password
@@ -71,3 +71,18 @@ $ cd tree/client-dir
 $ ./bin/changepw -u username -p password 
 ```
 The program will prompt a user to provide a new password that will be saved for their username.
+
+### Run `sendmsg`
+
+This executable will allow you to send message content to all specified recipients. Make sure to include the file path to the file containing the message content and pass along the list of recipients:
+```
+$ ./bin/sendmsg -f ./this-is-a-message-file.txt -r recipient1 recipient2 recipient3"
+```
+
+### Run `recvmsg`
+
+This executable allows you to retrieve mail from the server. No arguments are required:
+```
+$ ./bin/recvmsg
+```
+
