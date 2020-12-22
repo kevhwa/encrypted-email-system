@@ -437,7 +437,7 @@ int main(int argc, char **argv) {
 				goto CLEANUP;
 			}
 			
-			char file_path_buf[257] // max size of a filepath, plus null terminator
+			char file_path_buf[257]; // max size of a filepath, plus null terminator
 			snprintf(file_path_buf, sizeof(file_path_buf), "mailboxes/%s", requesting_client);
 			char filename_buf[100]; 
 			memset(filename_buf, 0, sizeof(filename_buf));
@@ -480,12 +480,12 @@ int main(int argc, char **argv) {
 			char sender[20];
 			int i = 0;
 			while (i < file_size && i < sizeof(sender) && file_contents[i] != '\n') {
-				sender[i] = file_contents[i]
+				sender[i] = file_contents[i];
 				i++;
 			}
 			sender[i] = '\0';
 		
-			if (file_contents[i] != '\n' || i + 1 >= filesize) {
+			if (file_contents[i] != '\n' || i + 1 >= file_size) {
 				// this is probably a problem
 				err = SSL_write(ssl, internal_error_resp, strlen(internal_error_resp));
 				goto CLEANUP;
@@ -494,7 +494,7 @@ int main(int argc, char **argv) {
 			// Get the start of the message content
 			char *beginning_of_msg_content = &file_contents[++i];
 			
-		  // -------- Read in the sender's certificate ------ //
+		   // -------- Read in the sender's certificate ------ //
 			memset(file_path_buf, 0, sizeof(file_path_buf));
 			char read_certbuf[4096];
 			int read_len = 0;
@@ -507,13 +507,18 @@ int main(int argc, char **argv) {
 				goto CLEANUP;
 			}
 
-      // ---- Provide the sender's cert, the message content back to client ---- //
+			// ---- Provide the sender's cert, the message content back to client ---- //
 			char success_buf[256];
 			int content_len = strlen(sender) + read_len + file_size - i;
 			sprintf(success_buf, success_template_with_content, content_len, sender);
 			SSL_write(ssl, success_buf, strlen(success_buf));
 			SSL_write(ssl, beginning_of_msg_content, file_size - i);
 			SSL_write(ssl, read_certbuf, read_len);
+
+			// delete the message once it is sent to the user
+			if (remove(file_path_buf) != 0) {
+				fprintf(stderr, "Read file could not be removed from server!\n");
+			}
 		}
 
 		CLEANUP: 
