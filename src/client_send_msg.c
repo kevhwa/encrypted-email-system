@@ -539,17 +539,51 @@ CertificatesHandler* parse_certificates(char *body) {
 		certificates_handler->recipients[j] = malloc((strlen(line) + 1) * sizeof(char));
 		strcpy(certificates_handler->recipients[j], line);
 
-		// save the content of the corresponding cert
-		line = strtok(NULL, "\n\nENDCERT\n\n");
+		// ----------- Save the content of the corresponding cert --------
+		int cert_buf_size = 1000;
+		char cert_buf[cert_buf_size];
+		int cert_len = 0;
+		char *start_cert = "-----BEGIN CERTIFICATE-----";
+		char *end_cert= "-----END CERTIFICATE-----";
 
-		printf("This is the certificate line parsed:\n%s\n", line);
-		if (line == NULL) {
+		line = strtok(NULL, "\n");
+		if (strcmp(line, start_cert)) {
+			fprintf(stderr, "Certificate appears to be missing or in incorrect location.\n");
+			free_certificates_handler(certificates_handler);
+			return NULL;
+		} else {
+			printf("Found the beginning of the certificate...");
+			memcpy(&cert_buf[cert_len], start_cert, strlen(start_cert));
+			cert_buf[strlen(start_cert)] = '\n';
+			cert_len += (strlen(start_cert) + 1);
+		};
+
+		while ((line = strtok(NULL, "\n")) && strcmp(line, end_cert) && cert_len <cert_buf_size) {
+			printf("Found more certificate content..\n.");
+			memcpy(&cert_buf[cert_len], line, strlen(line));
+			cert_buf[cert_len + strlen(line)] = '\n';
+			cert_len += (strlen(line) + 1);
+		}
+		if (strcmp(line, end_cert)) {
+			// we never found the end of the certificate, sigh...
+			fprintf(stderr, "Certificate contains unexpected content.\n");
+			free_certificates_handler(certificates_handler);
+		} else {
+			printf("Found the end of the certificate...\n");
+			memcpy(&cert_buf[cert_len], end_cert, strlen(end_cert));
+			cert_buf[cert_len + strlen(end_cert)] = '\n';
+			cert_len += (strlen(end_cert) + 1);
+		}
+		cert_buf[cert_len] = '\0';
+
+		printf("This is the certificate line parsed:\n%s\n", cert_buf);
+		if (!strlen(cert_buf)) {
 			fprintf(stderr, "Could not return certificate for certificate %d", j);
 			free_certificates_handler(certificates_handler);
 			return NULL;
 		}
-		certificates_handler->certificates[j] = malloc((strlen(line) + 1) * sizeof(char));
-		strcpy(certificates_handler->certificates[j], line);
+		certificates_handler->certificates[j] = malloc((strlen(cert_buf) + 1) * sizeof(char));
+		strcpy(certificates_handler->certificates[j], cert_buf);
 		j++;
 	}
 	line = strtok(NULL, "");
