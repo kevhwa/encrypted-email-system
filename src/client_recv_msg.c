@@ -27,7 +27,7 @@
 #define ENCRYPTED_MSG_TEMPLATE "mailboxes/%s/tmp_encrypted_msg.txt"
 #define VERIFIED_ENCRYPTED_MSG_TEMPLATE "mailboxes/%s/tmp_verified_msg.txt"
 #define DECRYPTED_MSG_TEMPLATE "mailboxes/%s/tmp_decrypted_msg.txt"
-#define SERVER_PORT 8080
+#define SERVER_PORT 8081
 
 int tcp_connection(char *host_name, int port);
 int verify_message(char *msg_file_path, char *verified_msg_path,
@@ -43,12 +43,11 @@ int main(int argc, char **argv) {
 	int sock;
 
 	// figure out who the user is so that their certificate and key can be configured
-	char *username = "addleness";
-	// char *username;
-	// if (!(username = getlogin())) {
-	// 	printf("Failed to determine identify of user.\n");
-	// 	exit(1);
-	// }
+	char *username;
+	if (!(username = getlogin())) {
+		printf("Failed to determine identify of user.\n");
+	 	exit(1);
+	}
 
 	char certificate_path[256];
 	char private_key_path[256];
@@ -155,9 +154,11 @@ int main(int argc, char **argv) {
 		//
 		
 		char *remaining_content;
-		if (!(remaining_content = strtok(NULL, "")) || strlen(remaining_content) < 2 || remaining_content[0] != '\n') {
+		if (!(remaining_content = strtok(NULL, ""))
+				|| strlen(remaining_content) < 2
+				|| remaining_content[0] != '\n') {
 			fprintf(stderr, "Server returned unexpected content. "
-				"Your message cannot be delivered\n");
+					"Your message cannot be delivered\n");
 			goto CLEANUP;
 		}
 

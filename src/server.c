@@ -966,7 +966,7 @@ int save_client_msg(char* request_body) {
 	strcpy(recipient, line);
 		
 	char path[200];
-	snprintf(path, sizeof(path), "mailboxes/%s/%ld", recipient, get_current_time());
+	snprintf(path, sizeof(path), "mailboxes/%s/%lld", recipient, get_current_time());
 	FILE* fp = fopen(path, "w");
 	if (!fp) {
 		free(sender);

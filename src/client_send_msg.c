@@ -24,7 +24,7 @@
 
 #define h_addr h_addr_list[0] /* for backward compatibility */
 #define TRUSTED_CA "trusted_ca/ca-chain.cert.pem"
-#define SERVER_PORT 8080
+#define SERVER_PORT 8081
 #define CERT_LOCATION_TEMPLATE "mailboxes/%s/%s.cert.pem"
 #define PRIVATE_KEY_TEMPLATE "mailboxes/%s/%s.private.key"
 #define ENCRYPTED_MSG_TEMPLATE "mailboxes/%s/tmp_encrypted_msg.txt"
@@ -45,13 +45,12 @@ int main(int argc, char **argv) {
 	SSL_CTX *ctx;
 	int sock;
 
-	char *username = "addleness";
 	// figure out who the user is so that their certificate and key can be configured
-	// char *username;
-	// if (!(username = getlogin())) {
-	// 	printf("Failed to determine identify of user.\n");
-	// 	exit(1);
-	// }
+	char *username;
+	if (!(username = getlogin())) {
+		printf("Failed to determine identify of user.\n");
+		exit(1);
+ 	}
 
 	char certificate_path[256];
 	char private_key_path[256];
