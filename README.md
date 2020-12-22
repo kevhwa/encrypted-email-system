@@ -14,8 +14,9 @@ Create the encrypted messaging system with the following make command. This will
 ```
 $ make install-with-security DEST=tree
 ```
+Running this command will leave you in the server sandbox. You can exit simply by typing `exit`, but you'll need sudo to re-enter.
 
-**Please make sure that the tree specified does not already exist.** If it does:
+**Please make sure that the tree specified does not already exist.** If it does, please run:
 ```
 $ sudo rm -rf tree
 ```
@@ -30,19 +31,16 @@ For easy testing and debugging, the installation script generates a message-syst
 
 ### Start Server
 
-If you installed the system using `make install-with-security`, the sandboxing setup should have brought you to the server directory, `server-dir`. Otherwise, if you installed the system with `make install-basic` then `cd` into the correct directory. The server needs to be run with client authentication and without (these will listen on different ports). Hence, to run the server:
+The server needs to be run as two instances: one running on port 8080 that accepts client usernames/passwords for authentication and another running on port 8081 that accepts and verifies user certificates.
+
+If you installed the system using `make install-with-security`, the sandboxing setup should have brought you into the server directory, `server-dir`. The easiest way to start the server(s) from there is simply by running:
 ```
-$ ./bin/server  # start the server instance that doesn't verify client certs (port 8080)
+$ (trap 'kill 0' SIGINT; ./bin/server & ./bin/server -a)
 ```
-And in a separate shell:
+
+If you installed the system with `make install-basic` then you can run the following command, where `tree` is the name of the messaging system tree you used:
 ```
-$ ./bin/server -a  # start the server that does verify client certs (port 8081)
-```
-Note that if you ran `make install-with-security`, you will need to use `sudo` to cd into the `server-dir`:
-```
-$ sudo -s
-$ cd tree/server-dir
-$ ./bin/server -a
+$ ./start_server.sh tree
 ```
 
 ### Client Programs 
@@ -108,4 +106,3 @@ Then you can then run tests via:
 $ ./tests/test_certificate_creation.sh
 $ ./tests/send_msg.sh
 ```
-

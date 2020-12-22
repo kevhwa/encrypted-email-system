@@ -240,7 +240,7 @@ int main(int argc, char **argv) {
 
 	// ------- Clean Up Everything -------- //
 CLEANUP:
-	// remove_temporary_files_from_mailbox(username);
+	remove_temporary_files_from_mailbox(username);
 	SSL_shutdown(ssl);
 	SSL_free(ssl);
 	close(sock);
@@ -384,7 +384,7 @@ int verify_message(char *msg_file_path, char *verified_msg_path,
         fprintf(stderr, "Verification of Sender Failed\n");
         goto CLEANUP;
     }
-    err = 1;
+    success = 1;
 
  CLEANUP:
     if (!success) {

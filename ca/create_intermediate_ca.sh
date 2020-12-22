@@ -81,7 +81,7 @@ openssl verify -CAfile ../../rootca-dir/certs/ca.cert.pem ./certs/intermediate.c
 cat ./certs/intermediate.cert.pem ../../rootca-dir/certs/ca.cert.pem > ./certs/ca-chain.cert.pem
 chmod 444 ./certs/ca-chain.cert.pem
 
-# Copy trusted CA to client side as well, as this will be needed in client program
+# Copy trusted CAs and chain cert to client side as well, as this will be needed in client program
 cp -v ./certs/ca-chain.cert.pem ../../client-dir/trusted_ca/ca-chain.cert.pem
 cp -v ./certs/intermediate.cert.pem ../../client-dir/trusted_ca/intermediate.cert.pem
 cp -v ../../rootca-dir/certs/ca.cert.pem ../../client-dir/trusted_ca/root.cert.pem

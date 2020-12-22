@@ -32,7 +32,7 @@
 #define ENCRYPTED_MSG_TEMPLATE "mailboxes/%s/tmp_encrypted_msg.txt"
 #define SIGNED_MSG_TEMPLATE "mailboxes/%s/tmp_signed_msg.txt"
 #define RECIPIENT_CERT_TEMPLATE "mailboxes/%s/tmp_%s.cert.pem"
-#define MAX_MAIL_SIZE 4096
+#define MAX_MAIL_SIZE 5000
 
 int tcp_connection(char *host_name, int port);
 void print_usage_information();
@@ -83,10 +83,18 @@ int main(int argc, char **argv) {
 	
 	// -------- Make sure file can be read -------- //
 	FILE* fp = fopen(path, "r");
+	fseek(fp, 0L, SEEK_END);     // go to the end of the file
+	int n_bytes = ftell(fp);     // get the number of bytes
+	fseek(fp, 0L, SEEK_SET);     // reset to beginning of file
+
 	if (fp == NULL) {
 		printf("The file you submitted cannot be opened or read\n");
 		return 2;
+	}	else if (n_bytes > MAX_MAIL_SIZE) {
+		printf("The file you submitted exceeds the maximum allowed size\n");
+		return 2;
 	}
+	fclose(fp);
 
 	// create the TCP socket
 	if ((sock = tcp_connection("localhost", SERVER_PORT)) < 0) {
@@ -153,7 +161,7 @@ int main(int argc, char **argv) {
 	// -------- Provide content to server -------- //
 	char obuf[4096];
 	sprintf(obuf, "GET /certificates HTTP/1.0\nContent-Length: %lu\n\n%s",
-			strlen(rcpts) + 1, rcpts);
+			strlen(rcpts), rcpts);
 
 	printf("This is the buffer sent to the server:\n%s\n", obuf);
 	printf("These are the recipients: %s\n", rcpts);
@@ -163,49 +171,47 @@ int main(int argc, char **argv) {
 	// --------- Get server response ---------- //
 
 	printf("Ready to receive server response...\n");
-	char *server_response = receive_ssl_response(ssl, "200 Success");
-	CertificatesHandler *certs_handler = NULL;
-
-	if (server_response) {
-		printf("Received recipient certificates!\n");
-
-		certs_handler = parse_certificates(server_response);
-
-		printf("Successfully parsed certificates!\n");
-		if (certs_handler != NULL) {
-
-			if (certs_handler->num == 0) {
-				printf("No valid recipients found.\n");
-			}
-			else {
-				FILE *tmpfile;
-				char path_buf[100];
-				for (int i = 0; i < certs_handler->num; i++) {
-					memset(path_buf, '\0', sizeof(path_buf));
-
-					if (certs_handler->certificates[i] == NULL)
-						continue;
-						
-					printf("Attempting to write certificate to file...\n");
-					snprintf(path_buf, sizeof(path_buf), RECIPIENT_CERT_TEMPLATE,
-							username, certs_handler->recipients[i]);
-
-					tmpfile = fopen(path_buf, "wb+");
-					fwrite(certs_handler->certificates[i], sizeof(char),
-							strlen(certs_handler->certificates[i]), tmpfile);
-					fclose(tmpfile);
-				}
-			}
-		} else {
-			printf("Could not parse certificates in response message received from server.\n");
-			goto CLEANUP;
-		}
-		free(server_response);
-	} else {
-		printf("Did not receive recipient certificates.\n");
+	RequestHandler* request_handler = parse_ssl_response(ssl);
+	if (!request_handler) {
+		fprintf(stdout, "Did not receive valid response from GET /certificates");
+		goto CLEANUP;
+	} else if (request_handler->command != SuccessResponse) {
+		fprintf(stdout, "Did not receive successful response from GET /certificates");
+		free_request_handler(request_handler);
 		goto CLEANUP;
 	}
 
+	printf("Received recipient certificates!\n");
+	CertificatesHandler *certs_handler = parse_certificates(request_handler->request_content);
+	if (certs_handler == NULL) {
+		printf("Could not parse certificates in response message received from server.\n");
+		free_request_handler(request_handler);
+		goto CLEANUP;
+	} 
+
+	printf("Successfully parsed certificates!\n");
+	if (certs_handler->num == 0) {
+		printf("No valid recipients found.\n");
+	}
+	else {
+		FILE *tmpfile;
+		char path_buf[100];
+		for (int i = 0; i < certs_handler->num; i++) {
+			memset(path_buf, '\0', sizeof(path_buf));
+
+			if (certs_handler->certificates[i] == NULL)
+				continue;
+				
+			printf("Attempting to write certificate to file...\n");
+			snprintf(path_buf, sizeof(path_buf), RECIPIENT_CERT_TEMPLATE,
+					username, certs_handler->recipients[i]);
+
+			tmpfile = fopen(path_buf, "wb+");
+			fwrite(certs_handler->certificates[i], sizeof(char),
+					strlen(certs_handler->certificates[i]), tmpfile);
+			fclose(tmpfile);
+		}
+	}
 	// ------ Encrypt messages and send them to the server----- //
 
 	printf("Encrypting messages to send to server...\n");
@@ -300,7 +306,7 @@ int main(int argc, char **argv) {
 
 	// ------- Clean Up -------- //
 	CLEANUP:
-	// remove_temporary_files_from_mailbox(username);
+	remove_temporary_files_from_mailbox(username);
 	free_certificates_handler(certs_handler);
 	SSL_shutdown(ssl);
 	SSL_free(ssl);
@@ -430,7 +436,7 @@ int encrypt_message(char *msg_path, char *rcpt_cert_path, char *encrypted_msg_pa
 	X509 *rcert = NULL;
 	STACK_OF(X509) *recips = NULL;
 	CMS_ContentInfo *cms = NULL;
-	int success = 0;
+	int ret = 1;
 	int flags = CMS_STREAM;
 	OpenSSL_add_all_algorithms();
 	ERR_load_crypto_strings();

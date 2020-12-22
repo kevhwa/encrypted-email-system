@@ -41,7 +41,7 @@ const char *success_template_with_content = "HTTP/1.0 200 Success\nContent-Lengt
 int tcp_listen(int port);
 int check_credential(char *username, char *submitted_password);
 int parse_credentials_from_request_body(char *request_body, char uname[],
-		char pwd[], int buf_len);
+		char pwd[], char newpwd[], int buf_len, int is_changepw);
 int generate_cert(X509_REQ *req, const char *p_ca_path,
 		const char *p_ca_key_path, const char *uname);
 X509_REQ* read_x509_req_from_file(char *path);
@@ -149,22 +149,19 @@ int main(int argc, char **argv) {
 			ERR_print_errors_fp(stderr);
 			return 3;
 		}
-
-		char buf[4096];
-		err = SSL_read(ssl, buf, sizeof(buf) - 1);
-		buf[err] = '\0';
-		fprintf(stdout, "Received %d chars of content:\n---\n%s----\n", err, buf);
-		RequestHandler *request_handler = handle_recvd_msg(buf);
-
+		
 		// --- Validate request and send resp back to the SSL client ---
 		int max_auth_len = 20;
 		char uname_buf[max_auth_len];
 		char pwd_buf[max_auth_len];
+		char newpwd_buf[max_auth_len];
+		memset(newpwd_buf, 0, max_auth_len);
 
+		RequestHandler *request_handler = parse_ssl_response(ssl);
 		if (!request_handler) {
 			err = SSL_write(ssl, internal_error_resp, strlen(internal_error_resp));
 			goto CLEANUP;
-		} else if (request_handler->status_code == BAD_REQUEST) {
+		} else if (request_handler->status_code == BAD_REQUEST || request_handler->command == SuccessResponse) {
 			err = SSL_write(ssl, bad_request_resp, strlen(bad_request_resp));
 			goto CLEANUP;
 		} else if (request_handler->status_code == NOT_FOUND) {
@@ -174,8 +171,8 @@ int main(int argc, char **argv) {
 
 		if (request_handler->command == ChangePW || request_handler->command == GetCert) {
 			if (parse_credentials_from_request_body(
-					request_handler->request_content, uname_buf, pwd_buf,
-					max_auth_len) < 0) {
+					request_handler->request_content, uname_buf, pwd_buf, newpwd_buf,
+					max_auth_len, request_handler->command == ChangePW) < 0) {
 				err = SSL_write(ssl, bad_request_resp, strlen(bad_request_resp));
 				goto CLEANUP;
 			}
@@ -184,15 +181,6 @@ int main(int argc, char **argv) {
 				printf("Authentication failed.\n");
 				err = SSL_write(ssl, unauthorized_resp, strlen(unauthorized_resp));
 				goto CLEANUP;
-			}
-			
-			memset(buf, 0, sizeof(buf));
-			if (request_handler->command == ChangePW) {
-				SSL_read(ssl, buf, sizeof(buf) - 1);
-				if (strlen(buf) < 2) {
-					err = SSL_write(ssl, bad_request_resp, strlen(bad_request_resp));
-					goto CLEANUP;
-				}
 			}
 
 			//--- If there are unread messages for client, don't let them change their certificate --- //
@@ -212,8 +200,13 @@ int main(int argc, char **argv) {
 
 			// --- Passed authentication and OK to change cert. Read in certificate request --- //
 			char cert_buf[4096];
-			int temp = SSL_read(ssl, cert_buf, sizeof(cert_buf) - 1);
-			cert_buf[temp] = '\0';
+			if (request_handler->command == GetCert) {
+				// Assume rest of request body is CSR. Add 2 for 2 newlines.
+				strcpy(cert_buf, request_handler->request_content + strlen(uname_buf) + strlen(pwd_buf) + 2);
+			} else {
+				// Assume rest of request body is CSR. Add 3 for 3 newlines.
+				strcpy(cert_buf, request_handler->request_content + strlen(uname_buf) + strlen(pwd_buf) + strlen(newpwd_buf) + 3);
+			}
 
 			// ------------ Save CSR to a CSR file   ----- //
 			memset(path, 0, sizeof(path));
@@ -257,7 +250,7 @@ int main(int argc, char **argv) {
 				char path_buf[100];
 				snprintf(path_buf, sizeof(path_buf), "passwords/%s.txt", uname_buf);
 
-				if (!write_new_password(buf, path_buf)) {
+				if (!write_new_password(newpwd_buf, path_buf)) {
 					fprintf(stderr, "Error ocurred writing password");
 					err = SSL_write(ssl, internal_error_resp, strlen(internal_error_resp));
 					goto CLEANUP;
@@ -398,15 +391,18 @@ int main(int argc, char **argv) {
 
 			// --- Receive SendMsg Commands ---//
 			while (1) {
-				char* body = receive_ssl_response(ssl, "POST /sendmsg HTTP/1.0");
-				if (body == NULL) {
+				request_handler = parse_ssl_response(ssl);
+				if (request_handler == NULL) {
+					goto CLEANUP;
+				} else if (request_handler->command != SendMsg) {
+					fprintf(stderr, "Expected SendMsg\n");
 					err = SSL_write(ssl, bad_request_resp, strlen(bad_request_resp));
 					goto CLEANUP;
 				}
-				if (strlen(body) == 0) {
+				if (request_handler->request_content == NULL || strlen(request_handler->request_content) == 0) {
 					break;
 				}
-				if (0 == save_client_msg(body)) {
+				if (0 == save_client_msg(request_handler->request_content)) {
 					err = SSL_write(ssl, content_buf, strlen(content_buf));
 				} else {
 					sprintf(content_buf, internal_error_resp, 0);
@@ -463,8 +459,9 @@ int main(int argc, char **argv) {
 			fseek(fp, 0, SEEK_END);
 			file_size = ftell(fp); 
 			fseek(fp, 0, SEEK_SET); 
-			char file_contents[file_size];
+			char file_contents[file_size + 1];
 			fread(file_contents, 1, file_size, fp);
+			file_contents[file_size] = '\0';
 			fclose(fp);
 			
 			// first line of the file will is a sender
@@ -508,16 +505,18 @@ int main(int argc, char **argv) {
 			SSL_write(ssl, beginning_of_msg_content, file_size - i);
 
 			// delete the message once it is sent to the user
-			// if (remove(file_path_buf) != 0) {
-			// 	fprintf(stderr, "Read file could not be removed from server!\n");
-			// }
+			if (remove(file_path_buf) != 0) {
+				fprintf(stderr, "Read file could not be removed from server!\n");
+			}
 		}
 
 		CLEANUP: 
 		SSL_shutdown(ssl);
 		SSL_free(ssl);
 		close(rqst);
-		free_request_handler(request_handler);
+		if (request_handler != NULL) {
+			free_request_handler(request_handler);
+		}
 	}
 	close(sock);
 	SSL_CTX_free(ctx);
@@ -891,10 +890,11 @@ int check_credential(char *username, char *submitted_password) {
  * =======
  * username
  * password
+ * new_password
  * ========
  */
 int parse_credentials_from_request_body(char *request_body, char uname[],
-		char pwd[], int buf_len) {
+		char pwd[], char newpwd[], int buf_len, int is_changepw) {
 
 	char buf_cpy[strlen(request_body) + 1];
 	strcpy(buf_cpy, request_body);
@@ -926,10 +926,31 @@ int parse_credentials_from_request_body(char *request_body, char uname[],
 		pwd[j] = buf_cpy[i];
 		j++;
 	}
-
-	//  if nothing was read-in for the password, it's missing
+	
 	if (strlen(pwd) == 0) {
 		fprintf(stderr, "Password could not be parsed from request body");
+		return -1;
+	}
+
+	if (!is_changepw) {
+		return 0;
+	}
+
+	// read another line for changepw
+	memset(newpwd, 0, buf_len);
+
+	// read in password from the next line; here, we read in all content that can fit
+	// into the password buf, or the rest of the content, or until a new line is hit,
+	// whatever comes first.
+	int k = 0;
+	for (i = i + 1; i < strlen(buf_cpy) && buf_cpy[i] != '\n' && k < buf_len - 1; i++) {
+		newpwd[k] = buf_cpy[i];
+		k++;
+	}
+
+	//  if nothing was read-in for the password, it's missing
+	if (strlen(newpwd) == 0) {
+		fprintf(stderr, "New password could not be parsed from request body");
 		return -1;
 	}
 	return 0;

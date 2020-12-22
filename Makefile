@@ -16,7 +16,7 @@ install-basic: clean all
 install-with-security: clean all
 	./bin/install-basic.sh $(DEST)
 	sudo ./bin/install-users.sh
-	sudo ./bin/install-priv.sh $(DEST)
+	./bin/install-priv.sh $(DEST)
 	sudo ./bin/install-sandbox.sh $(DEST)
 
 all: bin/getcert bin/changepw bin/server bin/sendmsg bin/recvmsg

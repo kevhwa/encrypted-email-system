@@ -13,6 +13,7 @@
 #include <sys/time.h>
 
 #include "request_handler.h"
+#define MAXHEADERSIZE 1048576
 
 /**
  * Creates request handler to contain parsed content of request.
@@ -27,6 +28,7 @@ RequestHandler* init_request_handler() {
 	}
 	request_handler->command = InvalidCommand;
 	request_handler->status_code = 200;
+	request_handler->content_length = 0;
 	request_handler->request_content = NULL;
 	request_handler->response_content = NULL;
 	return request_handler;
@@ -48,31 +50,67 @@ void free_request_handler(RequestHandler *request_handler) {
 	free(request_handler);
 }
 
-
 /**
- * Extracts the command and content from an incoming request
- * into a RequestHandler struct.
+ * Receives an HTTP response body using SSL_read. 
+ * Adapted from: https://stackoverflow.com/questions/38714363/read-html-response-using-ssl-read-in-c-http-1-0
  */
-RequestHandler* handle_recvd_msg(char *buf) {
-
+RequestHandler* parse_ssl_response(SSL *ssl) {
 	char *getcert = "POST /getcert HTTP/1.0";
 	char *changepw = "POST /changepw HTTP/1.0";
 	char *sendmsg = "POST /sendmsg HTTP/1.0";
 	char *usercerts = "GET /certificates HTTP/1.0";
 	char *recvmsg = "GET /message HTTP/1.0";
+ 	char *success = "HTTP/1.0 200 Success";
 
-	RequestHandler *request_handler = init_request_handler();
+	RequestHandler* request_handler = init_request_handler();
 	if (!request_handler) {
-		fprintf(stderr, "Could not handle received message.\n");
 		return NULL;
 	}
 
-	char buf_cpy[strlen(buf) + 1];
-	strcpy(buf_cpy, buf);
-	buf_cpy[strlen(buf)] = '\0';
+	char buf[4096];
+	char header[MAXHEADERSIZE];
+	int bytes;
+	int received = 0;
+	int i = 0;
+	char c[1];
+	int line_length = 0;
+	int is_valid_header = 1;
+	do {
+			bytes = SSL_read(ssl, c, 1);
+			if (bytes  <= 0) break;
+			if (c[0] == '\n') {
+					if (line_length == 0) {
+						break;
+					} else {
+						line_length = 0;
+					}
+			} else if (c[0] != '\r') {
+				line_length++;
+			};
+			header[i++] = c[0];
+			if (i == MAXHEADERSIZE) {
+				fprintf(stderr, "Header size exceeds maximum allowed header size");
+				is_valid_header = 0;
+				break;
+			}
+			received += bytes;
+	} while (1);
+
+	if (!is_valid_header) return NULL;
+	
+	header[received] = '\0';
+
+	char* header_cpy = malloc(strlen(header) + 1);
+	if (header_cpy == NULL) {
+		fprintf(stderr, "malloc failed");
+		return NULL;
+	}
+	strcpy(header_cpy, header);
+
+	fprintf(stdout, "Received %d chars of header:\n---\n%s----\n", received, header);
 
 	// get first line of message
-	char *line = strtok(buf_cpy, "\n");
+	char* line = strtok(header_cpy, "\n");
 	if (line == NULL) {
 		request_handler->status_code = BAD_REQUEST;
 		return request_handler;
@@ -94,7 +132,9 @@ RequestHandler* handle_recvd_msg(char *buf) {
 	} else if ((strncmp(usercerts, line, strlen(usercerts) - 3) == 0)
 			&& (strlen(line) == strlen(usercerts))) {
 		request_handler->command = UserCerts;
-	}
+	} else if ((strncmp(success, line, strlen(success)) == 0)) {
+		request_handler->command = SuccessResponse;		
+} 
 
 	// invalid request; could not match the endpoint requested to known endpoint
 	if (request_handler->command == InvalidCommand) {
@@ -126,252 +166,31 @@ RequestHandler* handle_recvd_msg(char *buf) {
 	} else {
 		content_length = atoi(content_length_val + 1);
 	}
-
-	// get rest of the request
-	// the first character should be a newline to indicate end of header section
-	char *rest_of_req = strtok(NULL, "");
-	if (rest_of_req == NULL || strncmp("\n", rest_of_req, 1)) {
-		request_handler->status_code = BAD_REQUEST;
-		return request_handler;
-	}
-
-	char *body = malloc(sizeof(char) * (content_length + 1));
-	memset(body, 0, sizeof(content_length) + 1);
-	strncpy(body, rest_of_req + 1, content_length);
-	body[content_length] = '\0';
-
-	request_handler->request_content = body;
-	return request_handler;
-}
-
-
-/**
- * Receives an HTTP response body using SSL_read.
- */
-char* receive_ssl_response(SSL *ssl, char* expected_header_line) {
-
-	char buf[4096];
-	int err = SSL_read(ssl, buf, sizeof(buf) - 1);
-	buf[err] = '\0';
-	fprintf(stdout, "Received %d chars of content:\n---\n%s----\n", err, buf);
-
-	// get content_length
-	char* header = (char*) malloc(strlen(buf) + 1);
-	if (header == NULL) {
-		fprintf(stderr, "malloc failed");
-		return NULL;
-	}
-	strcpy(header, buf);
-	// if server response not successful, return nothing
-	char* line = strtok(header, "\n");
-	if (!strstr(line, expected_header_line)) {
-		printf("Didn't find the expected header content (expected: %s, result: %s)\n", line, expected_header_line);
-		free(header);
-		return NULL;
-	}
-
-	line = strtok(NULL, "\n");
-	char *content_length_headername = "content-length:";
-	if (line == NULL
-			|| strncasecmp(content_length_headername, line,
-					strlen(content_length_headername)) != 0) {
-		printf("Server response header contained unexpected content\n");
-		return NULL;
-	}
-	char *content_length_val = strchr(line, ':');
-	if (content_length_val == NULL) {
-		free(header);
-		return NULL;
-	}
-
-	int content_length = 0;
-	// handle optional whitespace between : and the length value
-	if (*(content_length_val + 1) == ' ') {
-		content_length = atoi(content_length_val + 2);
-	} else {
-		content_length = atoi(content_length_val + 1);
-	}
-	free(header);
+	request_handler->content_length = content_length;
+	free(header_cpy);
 
 	char *body = (char*) malloc(content_length + 1);
 	if (!body) {
 		return NULL;
 	}
 	memset(body, '\0', content_length + 1);
-	int received = 0;
 
 	printf("Ready to receive server certificate content...\n");
+	received = 0;
 	while (received < content_length) {
 		memset(buf, '\0', sizeof(buf));
-		err = SSL_read(ssl, buf, sizeof(buf) - 1);
-		fprintf(stdout, "Body received %d chars of content:\n---\n%s----\n", err, buf);
-		if (err <= 0)
-			break;
+		bytes = SSL_read(ssl, buf, sizeof(buf) - 1);
+		fprintf(stdout, "Body received %d chars of content:\n---\n%s----\n", bytes, buf);
+		if (bytes <= 0) {
+			printf("SSL response parser entered error state, exiting...\n");
+			free_request_handler(request_handler);
+			return NULL;
+		}
 		strcat(body, buf);
-		received += err;
+		received += bytes;
 
 		printf("Received %d so far, expecting %d\n", received, content_length);
 	}
-	return body;
+	request_handler->request_content = body;
+	return request_handler;
 }
-
-/**
- * Receives an HTTP response body using SSL_read.
- */
-// RequestHandler* receive_ssl_reqhandler(SSL *ssl, char* expected_header_line) {
-// 	RequestHandler* req_handler = init_request_handler();
-// 	char buf[4096];
-// 	int err = SSL_read(ssl, buf, sizeof(buf) - 1);
-// 	buf[err] = '\0';
-// 	fprintf(stdout, "Received %d chars of content:\n---\n%s----\n", err, buf);
-
-// 	// get content_length
-// 	char* header = (char*) malloc(strlen(buf) + 1);
-// 	if (header == NULL) {
-// 		fprintf(stderr, "malloc failed");
-// 		return NULL;
-// 	}
-// 	strcpy(header, buf);
-// 	// if server response not successful, return nothing
-// 	char* line = strtok(header, "\n");
-// 	if (!strstr(line, expected_header_line)) {
-// 		printf("Didn't find the expected header content (expected: %s, result: %s)\n", line, expected_header_line);
-// 		free(header);
-// 		return NULL;
-// 	}
-
-// 	line = strtok(NULL, "\n");
-// 	char *content_length_headername = "content-length:";
-// 	if (line == NULL
-// 			|| strncasecmp(content_length_headername, line,
-// 					strlen(content_length_headername)) != 0) {
-// 		printf("Server response header contained unexpected content\n");
-// 		return NULL;
-// 	}
-// 	char *content_length_val = strchr(line, ':');
-// 	if (content_length_val == NULL) {
-// 		free(header);
-// 		return NULL;
-// 	}
-
-// 	int content_length = 0;
-// 	// handle optional whitespace between : and the length value
-// 	if (*(content_length_val + 1) == ' ') {
-// 		content_length = atoi(content_length_val + 2);
-// 	} else {
-// 		content_length = atoi(content_length_val + 1);
-// 	}
-// 	free(header);
-
-// 	char *body = (char*) malloc(content_length + 1);
-// 	if (!body) {
-// 		return NULL;
-// 	}
-// 	memset(body, '\0', content_length + 1);
-// 	int received = 0;
-
-// 	printf("Ready to receive server certificate content...\n");
-// 	while (received < content_length) {
-// 		memset(buf, '\0', sizeof(buf));
-// 		err = SSL_read(ssl, buf, sizeof(buf) - 1);
-// 		fprintf(stdout, "Body received %d chars of content:\n---\n%s----\n", err, buf);
-// 		if (err <= 0)
-// 			break;
-// 		strcat(body, buf);
-// 		received += err;
-
-// 		printf("Received %d so far, expecting %d\n", received, content_length);
-// 	}
-// 	return body;
-	
-// 	char *getcert = "POST /getcert HTTP/1.0";
-// 	char *changepw = "POST /changepw HTTP/1.0";
-// 	char *sendmsg = "POST /sendmsg HTTP/1.0";
-// 	char *usercerts = "GET /certificates HTTP/1.0";
-// 	char *recvmsg = "GET /message HTTP/1.0";
-//  char *success = "HTTP/1.0 200 Success";
-
-// 	RequestHandler *request_handler = init_request_handler();
-// 	if (!request_handler) {
-// 		fprintf(stderr, "Could not handle received message.\n");
-// 		return NULL;
-// 	}
-
-// 	char buf_cpy[strlen(buf) + 1];
-// 	strcpy(buf_cpy, buf);
-// 	buf_cpy[strlen(buf)] = '\0';
-
-// 	// get first line of message
-// 	char *line = strtok(buf_cpy, "\n");
-// 	if (line == NULL) {
-// 		request_handler->status_code = BAD_REQUEST;
-// 		return request_handler;
-// 	}
-
-// 	// http version can be anything; just make sure that the rest matches
-// 	if ((strncmp(getcert, line, strlen(getcert) - 3) == 0)
-// 			&& (strlen(line) == strlen(getcert))) {
-// 		request_handler->command = GetCert;
-// 	} else if ((strncmp(changepw, line, strlen(changepw) - 3) == 0)
-// 			&& (strlen(line) == strlen(changepw))) {
-// 		request_handler->command = ChangePW;
-// 	} else if ((strncmp(sendmsg, line, strlen(sendmsg) - 3) == 0)
-// 			&& (strlen(line) == strlen(sendmsg))) {
-// 		request_handler->command = SendMsg;
-// 	} else if ((strncmp(recvmsg, line, strlen(recvmsg) - 3) == 0)
-// 			&& (strlen(line) == strlen(recvmsg))) {
-// 		request_handler->command = RecvMsg;
-// 	} else if ((strncmp(usercerts, line, strlen(usercerts) - 3) == 0)
-// 			&& (strlen(line) == strlen(usercerts))) {
-// 		request_handler->command = UserCerts;
-// 	} else if ((strncmp(success, line, strlen(success)) == 0)) {
-//		request_handler->command = SuccessResponse;		
-// } 
-
-// 	// invalid request; could not match the endpoint requested to known endpoint
-// 	if (request_handler->command == InvalidCommand) {
-// 		request_handler->status_code = NOT_FOUND;
-// 		return request_handler;
-// 	}
-
-// 	// get second line
-// 	line = strtok(NULL, "\n");
-
-// 	char *content_length_headername = "content-length:";
-// 	if (line == NULL
-// 			|| strncasecmp(content_length_headername, line,
-// 					strlen(content_length_headername)) != 0) {
-// 		request_handler->status_code = BAD_REQUEST;
-// 		return request_handler;
-// 	}
-// 	char *content_length_val = strchr(line, ':');
-
-// 	if (content_length_val == NULL) {
-// 		request_handler->status_code = BAD_REQUEST;
-// 		return request_handler;
-// 	}
-
-// 	int content_length = 0;
-// 	// handle optional whitespace between : and the length value
-// 	if (*(content_length_val + 1) == ' ') {
-// 		content_length = atoi(content_length_val + 2);
-// 	} else {
-// 		content_length = atoi(content_length_val + 1);
-// 	}
-
-// 	// get rest of the request
-// 	// the first character should be a newline to indicate end of header section
-// 	char *rest_of_req = strtok(NULL, "");
-// 	if (rest_of_req == NULL || strncmp("\n", rest_of_req, 1)) {
-// 		request_handler->status_code = BAD_REQUEST;
-// 		return request_handler;
-// 	}
-
-// 	char *body = malloc(sizeof(char) * (content_length + 1));
-// 	memset(body, 0, sizeof(content_length) + 1);
-// 	strncpy(body, rest_of_req + 1, content_length);
-// 	body[content_length] = '\0';
-
-// 	request_handler->request_content = body;
-// 	return request_handler;
-// }

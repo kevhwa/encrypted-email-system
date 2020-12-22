@@ -4,6 +4,7 @@ dir="$1"
 
 [ $# -eq 0 ] && { echo "Usage: $0 dir-name"; exit 1; }
 
+echo -e "******** Starting acceptance tests for getcert and changepw executables ********\n";
 
 # Move into client directory
 
@@ -49,6 +50,8 @@ echo -e "***10. Attemping to run changepw executable without the correct argumen
 
 ./bin/changepw -k bad
 
-echo -e "Clean Up: Resetting user's credentials to their original content\n"
+echo -e "Clean Up: Resetting user's credentials to their original content...\n"
 
 echo "testuser" | ./bin/changepw -u $USER -p tester
+
+echo -e "***********************************************************\n";

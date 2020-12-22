@@ -24,6 +24,7 @@ enum server_command {
 typedef struct request_handler {
 	enum server_command command;
 	int status_code;
+	int content_length;
 	char *request_content;
 	char *response_content;
 } RequestHandler;
@@ -36,12 +37,10 @@ typedef struct certificates_handler {
 
 int save_client_msg(char* request_body);
 
-RequestHandler* handle_recvd_msg(char *buf);
-
 RequestHandler* init_request_handler();
 
 void free_request_handler(RequestHandler *request_handler);
 
-char* receive_ssl_response(SSL *ssl, char* expected_header_line);
+RequestHandler* parse_ssl_response(SSL *ssl);
 
 #endif /* SRC_REQUEST_HANDLER_H_ */
