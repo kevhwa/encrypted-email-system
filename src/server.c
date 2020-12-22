@@ -385,6 +385,7 @@ int main(int argc, char **argv) {
 			err = SSL_write(ssl, response_body, response_size);
 
 			fprintf(stdout, "Sent certificates:\n---\n%s%s\n---\n", content_buf, response_body);
+			fflush(stdout);
 			free(response_body);
 
 			// --- Receive SendMsg Commands ---//

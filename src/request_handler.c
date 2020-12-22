@@ -162,10 +162,10 @@ char* receive_ssl_response(SSL *ssl, char* expected_header_line) {
 		return NULL;
 	}
 	strcpy(header, buf);
-
 	// if server response not successful, return nothing
 	char* line = strtok(header, "\n");
 	if (!strstr(line, expected_header_line)) {
+		printf("Didn't find the expected header content (expected: %s, result: %s)\n", line, expected_header_line);
 		free(header);
 		return NULL;
 	}

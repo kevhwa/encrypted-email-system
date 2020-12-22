@@ -14,7 +14,9 @@
 #include <openssl/pem.h>
 #include <openssl/x509.h>
 #include <openssl/cms.h>
+#include <pwd.h>
 #include <dirent.h>
+
 #include <sys/time.h>
 
 #include "create_ctx.h"
@@ -48,7 +50,10 @@ int main(int argc, char **argv) {
 
 	// figure out who the user is so that their certificate and key can be configured
 	char *username;
-	if (!(username = getlogin())) {
+	struct passwd *pass; 
+	pass = getpwuid(getuid()); 
+	username = pass->pw_name;
+	if (!username) {
 		printf("Failed to determine identify of user.\n");
 		exit(1);
  	}
@@ -158,7 +163,7 @@ int main(int argc, char **argv) {
 	// --------- Get server response ---------- //
 
 	printf("Ready to receive server response...\n");
-	char *server_response = receive_ssl_response(ssl, "200 Response");
+	char *server_response = receive_ssl_response(ssl, "200 Success");
 	CertificatesHandler *certs_handler = NULL;
 
 	if (server_response) {
@@ -262,15 +267,16 @@ int main(int argc, char **argv) {
 		//
 		// sender 
 		// recipient
+		char header_buf[256];
 		char content_buf[256 + n_bytes];
 		int body_len = strlen(certs_handler->recipients[i]) + strlen(username) 
 			+ strlen(file_buf) + 2;
-		sprintf(content_buf,
-				"POST /sendmsg HTTP/1.0\nContent-Length: %d\n\n%s\n%s\n%s",
-				body_len, username, certs_handler->recipients[i], file_buf);
 
-		printf("Passing encrypted message back to server...\n");
+		sprintf(header_buf, "POST /sendmsg HTTP/1.0\nContent-Length: %d\n\n", body_len);
+		sprintf(content_buf, "%s\n%s\n%s", username, certs_handler->recipients[i], file_buf);
 
+		printf("Passing encrypted message content back to server...\n");
+		SSL_write(ssl, header_buf, strlen(header_buf));
 		SSL_write(ssl, content_buf, strlen(content_buf));
 
 		// --------- Get server response to request to sendmsg ---------- //
@@ -283,6 +289,7 @@ int main(int argc, char **argv) {
 			fprintf(stdout, "Your message was successfully mailed "
 					"to %s.\n", certs_handler->recipients[i]);
 		} else {
+			printf("Server unsuccessful response:\n%s\n", response_buf);
 			printf("Sorry, an error occurred in sending your message "
 					"to %s.\n", certs_handler->recipients[i]);
 		}
