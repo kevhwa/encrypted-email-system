@@ -208,9 +208,9 @@ int main(int argc, char **argv) {
 	printf("Encrypting messages to send to server...\n");
 
 	for (int i = 0; i < certs_handler->num; i++) {
-		if(strcmp(certs_handler->certificates[i], "NOCERT") == 0) {
-			printf("Did not receive certificate for recipient '%s'\n", 
-					certs_handler->recipients[i]);
+		if (certs_handler->certificates[i] == NULL) {
+			printf("Did not receive certificate for recipient, so cannot send encrypted "
+					"message to their mailbox '%s'\n", certs_handler->recipients[i]);
 			continue;
 		}
 		
@@ -220,6 +220,9 @@ int main(int argc, char **argv) {
 		char rcpt_cert_buf[128];
 		snprintf(rcpt_cert_buf, sizeof(rcpt_cert_buf), RECIPIENT_CERT_TEMPLATE,
 				username, certs_handler->recipients[i]);
+
+		printf("Encrypted message will be stored at %s\n", encrypt_msg_path_buf);
+		printf("Recipient cert stored at %s\n", rcpt_cert_buf);
 
 		if (encrypt_message(path, rcpt_cert_buf, encrypt_msg_path_buf)) {
 			fprintf(stderr, "Encryption step failed for %s\n", rcpt_cert_buf);
@@ -346,6 +349,8 @@ int sign_encrypted_message(char *encrypted_msg_path, char *signer_cert_path,
 	OpenSSL_add_all_algorithms();
 	ERR_load_crypto_strings();
 
+	printf("Attempting to sign message\n");
+
 	/* Read in signer certificate and private key */
 	tbio = BIO_new_file(signer_cert_path, "r");
 	if (!tbio) {
@@ -424,12 +429,16 @@ int encrypt_message(char *msg_path, char *rcpt_cert_path, char *encrypted_msg_pa
 	OpenSSL_add_all_algorithms();
 	ERR_load_crypto_strings();
 
+	printf("Attempting to encrypt message\n");
+
 	/* Read in recipient certificate */
 	if (!(BIO_new_file(rcpt_cert_path, "rb+"))) {
 		fprintf(stderr, "Could not open recipient certificate at %s\n",
 				rcpt_cert_path);
 		goto err;
 	}
+
+	printf("Here in encrypt msg 0\n");
 
 	if (!(rcert = PEM_read_bio_X509(tbio, NULL, 0, NULL))) {
 		fprintf(stderr, "Could not read recipient X509 from TBIO\n");
@@ -442,6 +451,8 @@ int encrypt_message(char *msg_path, char *rcpt_cert_path, char *encrypted_msg_pa
 		fprintf(stderr, "Could not add recipient cert to stack\n");
 		goto err;
 	}
+
+	printf("Here in encrypt msg 1\n");
 
 	/*
 	 * sk_X509_pop_free will free up recipient STACK and its contents so set
@@ -465,6 +476,8 @@ int encrypt_message(char *msg_path, char *rcpt_cert_path, char *encrypted_msg_pa
 		fprintf(stderr, "Could not open new encrypted message file\n");
 		goto err;
 	}
+
+	printf("Here in encrypt msg 2\n");
 
 	/* Write out S/MIME message to file */
 	if (!SMIME_write_CMS(out, cms, in, flags)) {
