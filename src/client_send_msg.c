@@ -191,8 +191,6 @@ int main(int argc, char **argv) {
 					
 				}
 			}
-			printf("Attempting to free cert handler...\n");
-			free_certificates_handler(certs_handler);
 		} else {
 			printf("Could not parse certificates in response message received from server.\n");
 			goto CLEANUP;
@@ -296,6 +294,7 @@ int main(int argc, char **argv) {
 
 	// ------- Clean Up -------- //
 	CLEANUP:
+	free_certificates_handler(certs_handler);
 	SSL_shutdown(ssl);
 	SSL_free(ssl);
 	close(sock);
