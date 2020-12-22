@@ -540,30 +540,40 @@ CertificatesHandler* parse_certificates(char *body) {
 		strcpy(certificates_handler->recipients[j], line);
 
 		// ----------- Save the content of the corresponding cert --------
-		int cert_buf_size = 1000;
+		int cert_buf_size = 4096;
 		char cert_buf[cert_buf_size];
 		int cert_len = 0;
 		char *start_cert = "-----BEGIN CERTIFICATE-----";
 		char *end_cert= "-----END CERTIFICATE-----";
+		char *no_cert = "NOCERT";
 
 		line = strtok(NULL, "\n");
-		if (strcmp(line, start_cert)) {
-			fprintf(stderr, "Certificate appears to be missing or in incorrect location.\n");
-			free_certificates_handler(certificates_handler);
-			return NULL;
-		} else {
+		if (!strcmp(line, start_cert)) {
 			printf("Found the beginning of the certificate...");
 			memcpy(&cert_buf[cert_len], start_cert, strlen(start_cert));
 			cert_buf[strlen(start_cert)] = '\n';
 			cert_len += (strlen(start_cert) + 1);
-		};
 
-		while ((line = strtok(NULL, "\n")) && strcmp(line, end_cert) && cert_len <cert_buf_size) {
+		} else if (!strcmp(line, no_cert)){
+			printf("No certificate is available for this recipient..\n");
+			certificates_handler->certificates[j] = NULL;
+			line = strtok(NULL, "\n");
+			continue;
+
+		} else {
+			fprintf(stderr, "Certificate appears to be missing or in incorrect location.\n");
+			free_certificates_handler(certificates_handler);
+			return NULL;
+		}
+
+		while ((line = strtok(NULL, "\n")) && strcmp(line, end_cert) && cert_len < cert_buf_size) {
 			printf("Found more certificate content..\n.");
 			memcpy(&cert_buf[cert_len], line, strlen(line));
 			cert_buf[cert_len + strlen(line)] = '\n';
 			cert_len += (strlen(line) + 1);
 		}
+
+
 		if (strcmp(line, end_cert)) {
 			// we never found the end of the certificate, sigh...
 			fprintf(stderr, "Certificate contains unexpected content.\n");
@@ -585,6 +595,7 @@ CertificatesHandler* parse_certificates(char *body) {
 		certificates_handler->certificates[j] = malloc((strlen(cert_buf) + 1) * sizeof(char));
 		strcpy(certificates_handler->certificates[j], cert_buf);
 		j++;
+		line = strtok(NULL, "\n"); // go past the new line separator
 	}
 	line = strtok(NULL, "");
 

@@ -328,7 +328,7 @@ int main(int argc, char **argv) {
 			snprintf(response_body, max_size, "%d\n", no_recpts);
 			int response_size = strlen(response_body) + 1;
 
-			char* cert_separator = "\n\nENDCERT\n\n";
+			char* cert_separator = "\n";
 			int cert_separator_len = strlen(cert_separator);
 			char path_buf[100];
 			FILE* cert_fp;
