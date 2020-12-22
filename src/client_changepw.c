@@ -46,10 +46,12 @@ int main(int argc, char **argv) {
 	}
 
     // prompt user for a new password
-    get_hidden_pw(new_pass, MAX_LENGTH);
+	char msg[100];
+	sprintf(msg, "Please provide a new password (less than %d characters): ", MAX_LENGTH);
+    get_hidden_pw(msg, new_pass, MAX_LENGTH);
     while (strlen(new_pass) < 2 || strlen(new_pass) > 20) {
-        printf("Please choose a password between 2-20 characters");
-        get_hidden_pw(new_pass, MAX_LENGTH);
+        printf("Your password is not a valid length (2-20 characters)");
+        get_hidden_pw(msg, new_pass, MAX_LENGTH);
     }
 
 	// create the SSL context; note that no certificate
@@ -116,9 +118,13 @@ int main(int argc, char **argv) {
 	int cert_size = 0;
 	EVP_PKEY *p_key;
 
+
 	if (!(p_key = generate_key(uname))) {
-		fprintf(stderr, "Could not generate RSA keys.\n");
-		exit(1);
+		fprintf(stderr, "Are you sure you submitted your username correctly?\n");
+		SSL_shutdown(ssl);
+		SSL_free(ssl);
+		close(sock);
+		return 1;
 	}
 
 	// ------------ Generate CSR ------------- //
@@ -126,8 +132,12 @@ int main(int argc, char **argv) {
 	if (!cert_size) {
 		fprintf(stderr, "Could not generate X509 certificate REQ.\n");
 		EVP_PKEY_free(p_key);
-		exit(1);
+		SSL_shutdown(ssl);
+		SSL_free(ssl);
+		close(sock);
+		return 2;
 	}
+
 	char cert_buf[cert_size + 1];
 	read_x509_req_from_file(uname, cert_buf, cert_size);
 

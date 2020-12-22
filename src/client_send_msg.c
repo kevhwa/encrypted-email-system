@@ -146,12 +146,17 @@ int main(int argc, char **argv) {
 
 	// -------- Provide content to server -------- //
 	char obuf[4096];
-	sprintf(obuf, "GET /certificates HTTP/1.0\nContent-Length: %lu\n\n%s\n",
+	sprintf(obuf, "GET /certificates HTTP/1.0\nContent-Length: %lu\n\n%s",
 			strlen(rcpts) + 1, rcpts);
+
+	printf("This is the buffer sent to the server:\n%s\n", obuf);
+	printf("These are the recipients: %s\n", rcpts);
 
 	SSL_write(ssl, obuf, strlen(obuf));
 
 	// --------- Get server response ---------- //
+
+	printf("Ready to receive server response...\n");
 	char *server_response = receive_ssl_response(ssl);
 	CertificatesHandler *certs_handler = NULL;
 
@@ -159,20 +164,23 @@ int main(int argc, char **argv) {
 		printf("Received recipient certificates!\n");
 
 		certs_handler = parse_certificates(server_response);
+
+		printf("Successfully parsed certificates!\n");
 		if (certs_handler != NULL) {
+
 			if (certs_handler->num == 0) {
 				printf("No valid recipients found.\n");
-			} else {
+			}
+			else {
 				FILE *tmpfile;
 				char path_buf[100];
 				for (int i = 0; i < certs_handler->num; i++) {
 					memset(path_buf, '\0', sizeof(path_buf));
-					// continue if certificates is empty
-					// "mailboxes/meganfrenkel/tmp_derek.pem"
 
-					if(strcmp(certs_handler->certificates[i], "NOCERT") == 0) 
+					if (certs_handler->certificates[i] == NULL)
 						continue;
 						
+					printf("Attempting to write certificate to file...\n");
 					snprintf(path_buf, sizeof(path_buf), RECIPIENT_CERT_TEMPLATE,
 							username, certs_handler->recipients[i]);
 
@@ -183,6 +191,7 @@ int main(int argc, char **argv) {
 					
 				}
 			}
+			printf("Attempting to free cert handler...\n");
 			free_certificates_handler(certs_handler);
 		} else {
 			printf("Could not parse certificates in response message received from server.\n");
@@ -195,6 +204,9 @@ int main(int argc, char **argv) {
 	}
 
 	// ------ Encrypt messages and send them to the server----- //
+
+	printf("Encrypting messages to send to server...\n");
+
 	for (int i = 0; i < certs_handler->num; i++) {
 		if(strcmp(certs_handler->certificates[i], "NOCERT") == 0) {
 			printf("Did not receive certificate for recipient '%s'\n", 
@@ -202,7 +214,6 @@ int main(int argc, char **argv) {
 			continue;
 		}
 		
-
 		char encrypt_msg_path_buf[128];
 		sprintf(encrypt_msg_path_buf, ENCRYPTED_MSG_TEMPLATE, username);
 
@@ -215,6 +226,8 @@ int main(int argc, char **argv) {
 			goto CLEANUP;
 		}
 
+		printf("Successfully encrypted messages...\n");
+
 		char signed_msg_path_buf[128];
 		sprintf(signed_msg_path_buf, SIGNED_MSG_TEMPLATE, username);
 		if (sign_encrypted_message(encrypt_msg_path_buf, certificate_path,
@@ -222,6 +235,8 @@ int main(int argc, char **argv) {
 			fprintf(stderr, "Digital signature step failed...\n");
 			goto CLEANUP;
 		}
+
+		printf("Successfully signed messages...\n");
 
 		// ----- Send the content in signed_msg_path_buf to the server ------//
 		// read in signed, encrypted content from file
@@ -253,6 +268,8 @@ int main(int argc, char **argv) {
 		sprintf(content_buf,
 				"POST /sendmsg HTTP/1.0\nContent-Length: %d\n\n%s\n%s\n%s",
 				body_len, username, certs_handler->recipients[i], file_buf);
+
+		printf("Passing encrypted message back to server...\n");
 
 		SSL_write(ssl, content_buf, strlen(content_buf));
 
@@ -487,8 +504,10 @@ void print_usage_information() {
 CertificatesHandler* parse_certificates(char *body) {
 	CertificatesHandler *certificates_handler;
 
-	if (!(certificates_handler = (CertificatesHandler*) malloc(
-			sizeof(CertificatesHandler)))) {
+	printf("** Attempting to parse certificates...\n");
+	printf("This is the body retrieved:\n%s\n", body);
+
+	if (!(certificates_handler = (CertificatesHandler*) malloc(sizeof(CertificatesHandler)))) {
 		fprintf(stderr, "Could not create certificates handler for request.\n");
 		return NULL;
 	}
@@ -504,40 +523,92 @@ CertificatesHandler* parse_certificates(char *body) {
 		free_certificates_handler(certificates_handler);
 		return NULL;
 	}
+	printf("Parsing %d certificates...\n", num_certs);
+
 	certificates_handler->num = num_certs;
 	certificates_handler->certificates = (char**) malloc((num_certs) * sizeof(char*));
 	certificates_handler->recipients = (char**) malloc((num_certs) * sizeof(char*));
+
 	int j = 0;
 	while (j < num_certs) {
+
 		// next line should be the recipient name
 		line = strtok(NULL, "\n");
+		printf("This is the recipient line parsed:\n%s\n", line);
 		if (line == NULL) {
-			fprintf(stderr, "could not return recipient for certificate %d", j);
+			fprintf(stderr, "Could not return recipient for certificate %d", j);
 			free_certificates_handler(certificates_handler);
 			return NULL;
 		}
+
+		// save name of the recipient
 		certificates_handler->recipients[j] = malloc((strlen(line) + 1) * sizeof(char));
 		strcpy(certificates_handler->recipients[j], line);
 
-		// followed by the certificate
-		line = strtok(NULL, "\n\nENDCERT\n\n");
-		if (line == NULL) {
-			fprintf(stderr, "could not return certificate for certificate %d", j);
+		// ----------- Save the content of the corresponding cert --------
+		int cert_buf_size = 4096;
+		char cert_buf[cert_buf_size];
+		int cert_len = 0;
+		char *start_cert = "-----BEGIN CERTIFICATE-----";
+		char *end_cert= "-----END CERTIFICATE-----";
+		char *no_cert = "NOCERT";
+
+		line = strtok(NULL, "\n");
+		if (!strcmp(line, start_cert)) {
+			memcpy(&cert_buf[cert_len], start_cert, strlen(start_cert));
+			cert_buf[strlen(start_cert)] = '\n';
+			cert_len += (strlen(start_cert) + 1);
+
+		} else if (!strcmp(line, no_cert)) {
+			fprintf(stdout, "No certificate is available for %s recipient..\n",
+					certificates_handler->recipients[j]);
+			certificates_handler->certificates[j] = NULL;
+			line = strtok(NULL, "\n");
+			continue;
+
+		} else {
+			fprintf(stderr, "Certificate appears to be missing or in incorrect location.\n");
 			free_certificates_handler(certificates_handler);
 			return NULL;
 		}
-		certificates_handler->certificates[j] = malloc((strlen(line) + 1) * sizeof(char));
-		strcpy(certificates_handler->certificates[j], line);
+
+		while ((line = strtok(NULL, "\n")) && strcmp(line, end_cert) && cert_len < cert_buf_size) {
+			memcpy(&cert_buf[cert_len], line, strlen(line));
+			cert_buf[cert_len + strlen(line)] = '\n';
+			cert_len += (strlen(line) + 1);
+		}
+
+		if (strcmp(line, end_cert)) {
+			// we never found the end of the certificate, sigh...
+			fprintf(stderr, "Certificate contains unexpected content.\n");
+			free_certificates_handler(certificates_handler);
+		} else {
+			memcpy(&cert_buf[cert_len], end_cert, strlen(end_cert));
+			cert_buf[cert_len + strlen(end_cert)] = '\n';
+			cert_len += (strlen(end_cert) + 1);
+		}
+		cert_buf[cert_len] = '\0';
+
+		printf("This is the certificate parsed:\n%s\n", cert_buf);
+		if (!strlen(cert_buf)) {
+			fprintf(stderr, "Could not return certificate for certificate %d", j);
+			free_certificates_handler(certificates_handler);
+			return NULL;
+		}
+		certificates_handler->certificates[j] = malloc((strlen(cert_buf) + 1) * sizeof(char));
+		strcpy(certificates_handler->certificates[j], cert_buf);
 		j++;
 	}
-	line = strtok(NULL, "");
+	printf("Got to here..\n");
 
-	// should be nothing left over at end
-	if (strlen(line) != 0) {
-		fprintf(stderr, "certificates has leftover %s", line);
+	// there should be a trailing \n and that's it
+	line = strtok(NULL, "");
+	if (strlen(line) == 0 || !(strlen(line) == 1 && line[0] == '\n')) {
+		fprintf(stderr, "The certificates has unexpected leftover content of len (%lu):\n'%s'\n", strlen(line), line);
 		free_certificates_handler(certificates_handler);
 		return NULL;
 	}
+	printf("Done parsing certs\n");
 	return certificates_handler;
 }
 

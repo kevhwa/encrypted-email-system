@@ -152,10 +152,11 @@ RequestHandler* handle_recvd_msg(char *buf) {
  * Receives an HTTP response body using SSL_read.
  */
 char* receive_ssl_response(SSL *ssl) {
+
 	char buf[4096];
 	int err = SSL_read(ssl, buf, sizeof(buf) - 1);
 	buf[err] = '\0';
-	fprintf(stdout, "Header received %d chars of content:\n---\n%s----\n", err, buf);
+	fprintf(stdout, "Received %d chars of content:\n---\n%s----\n", err, buf);
 
 	// get content_length
 	char* header = (char*) malloc(strlen(buf) + 1);
@@ -165,23 +166,28 @@ char* receive_ssl_response(SSL *ssl) {
 	}
 	strcpy(header, buf);
 	
+
+	// if server response not successful, return nothing
 	char* line = strtok(header, "\n");
 	if (!strstr(line, "200 Success")) {
+		free(header);
 		return NULL;
 	}
 
-	line = strtok(header, "\n");
-
+	line = strtok(NULL, "\n");
 	char *content_length_headername = "content-length:";
 	if (line == NULL
 			|| strncasecmp(content_length_headername, line,
 					strlen(content_length_headername)) != 0) {
+		printf("Server response header contained unexpected content\n");
 		return NULL;
 	}
 	char *content_length_val = strchr(line, ':');
 	if (content_length_val == NULL) {
+		free(header);
 		return NULL;
 	}
+
 	int content_length = 0;
 	// handle optional whitespace between : and the length value
 	if (*(content_length_val + 1) == ' ') {
@@ -192,12 +198,14 @@ char* receive_ssl_response(SSL *ssl) {
 	free(header);
 
 	char *body = (char*) malloc(content_length + 1);
-	if (body == NULL) {
+	if (!body) {
 		return NULL;
 	}
 	memset(body, '\0', content_length + 1);
 
 	int received = 0;
+
+	printf("Ready to receive server certificate content...\n");
 	while (received < content_length) {
 		memset(buf, '\0', sizeof(buf));
 		err = SSL_read(ssl, buf, sizeof(buf) - 1);
@@ -206,6 +214,8 @@ char* receive_ssl_response(SSL *ssl) {
 			break;
 		strcat(body, buf);
 		received += err;
+
+		printf("Received %d so far, expecting %d\n", received, content_length);
 	}
 	return body;
 }
