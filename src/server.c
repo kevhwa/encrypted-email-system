@@ -34,6 +34,7 @@ const char *unauthorized_resp = "HTTP/1.0 401 Unauthorized\nContent-Length: 0\n\
 const char *conflict_resp = "HTTP/1.0 409 Conflict\nContent-Length: %d\n\n";
 const char *internal_error_resp = "HTTP/1.0 500 Internal Server Error\nContent-Length: 0\n\n";
 const char *success_template = "HTTP/1.0 200 Success\nContent-Length: %d\n\n";
+const char *success_template_with_content = "HTTP/1.0 200 Success\nContent-Length: %d\n\n%s";
 
 int tcp_listen(int port);
 RequestHandler* init_request_handler();
@@ -463,7 +464,7 @@ int main(int argc, char **argv) {
 			}
 
 			// Get the start of the message content
-			char *beginning_of_msg_content = &file_contents[i + 1];
+			char *beginning_of_msg_content = &file_contents[++i];
 			
 		    // ----- Get the sender's certificate ----- //
 			memset(file_path_buf, 0, sizeof(file_path_buf));
@@ -480,9 +481,10 @@ int main(int argc, char **argv) {
 
 			// ----- MIGHT BE A BETTER WAY TO DO THIS!!! --------
 			char success_buf[256];
-			sprintf(success_buf, success_template, read_len + (file_size - (i + 1)));
+			int content_len = strlen(sender) + read_len + file_size - i;
+			sprintf(success_buf, success_template_with_content, content_len, sender);
 			SSL_write(ssl, success_buf, strlen(success_buf));
-			SSL_write(ssl, beginning_of_msg_content, file_size - (i + 1));
+			SSL_write(ssl, beginning_of_msg_content, file_size - i);
 			SSL_write(ssl, read_certbuf, read_len);
 		}
 

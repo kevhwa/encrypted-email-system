@@ -23,14 +23,16 @@
 #define TRUSTED_CA "trusted_ca/ca-chain.cert.pem"
 #define CERT_LOCATION_TEMPLATE "mailboxes/%s/%s.cert.pem"
 #define PRIVATE_KEY_TEMPLATE "mailboxes/%s/%s.private.key"
+#define SENDER_CERT_TEMPLATE "mailboxes/%s/tmp_%s.cert.pem"
+#define ENCRYPTED_MSG_TEMPLATE "mailboxes/%s/tmp_encrypted_msg.txt"
 #define VERIFIED_ENCRYPTED_MSG_TEMPLATE "mailboxes/%s/tmp_verified_msg.txt"
 #define DECRYPTED_MSG_TEMPLATE "mailboxes/%s/tmp_decrypted_msg.txt"
 #define SERVER_PORT 8081
 
 int tcp_connection(char *host_name, int port);
-int verify_message(char *msg_file_path, char *verified_msg_path, 
+int verify_message(char *msg_file_path, char *verified_msg_path,
 		char *sender_cert_path);
-int decrypt_message(char *encrypted_msg_path, char *decrypted_msg_path, 
+int decrypt_message(char *encrypted_msg_path, char *decrypted_msg_path,
 		char *client_cert_path, char *client_pkey_path);
 
 
@@ -115,24 +117,74 @@ int main(int argc, char **argv) {
 
 	char content_buf[4000];
 	char obuf[4096];
-	sprintf(obuf, "GET /message HTTP/1.0\nContent-Length: %d\n\n%s", strlen(username), username);
+	sprintf(obuf, "GET /message HTTP/1.0\nContent-Length: %lu\n\n%s",
+			strlen(username), username);
 	SSL_write(ssl, obuf, strlen(obuf));
 
-	// --------- Get server response ---------- //
+	// --------- Get server response and parse the content---------- //
 
 	char response_buf[4096];
+	char msg_file_path[256];
+	char sender_cert_path[256];
 	err = SSL_read(ssl, response_buf, sizeof(response_buf) - 1);
 	response_buf[err] = '\0';
 
 	if (strstr(response_buf, "200 Success")) {
-		printf("Success!\n");
-	
-		// handle case where the response is successful, but there are no new messages to read
 		
-		// if message is available:
-		// parse sender information from request body
-		// parse sender certificate from request body
-		// parse sender message contents from request body
+		// find the content length returned
+		char *line = NULL;
+		char *content_length_val = NULL;
+		int content_length = 0;
+
+		line = strtok(response_buf, "\n"); 
+		line = strtok(NULL, "\n");
+		content_length_val = NULL;
+		if (!(line = strtok(NULL, "\n")) || !(content_length_val = strchr(line, ':'))) {
+			fprintf(stderr, "Server returned unexpected content. "
+				"Your message cannot be delivered\n");
+			goto CLEANUP;
+		}
+		content_length = atoi(content_length_val + 1);
+
+		// ----- Parse Sender Information from Request Body ------ //
+
+		if (!(line = strtok(NULL, "")) || strlen(line) < 2 || line[0] != '\n') {
+			fprintf(stderr, "Server returned unexpected content. "
+				"Your message cannot be delivered\n");
+			goto CLEANUP;
+		}
+
+		// rest of the content should be the sender name
+		char *sender_name = &line[1];
+		printf("Recieved message from %s\n!", sender_name);
+
+		// ---------- Read in the sender certificate ------- //
+
+		char content_buf[content_length];
+		err = SSL_read(ssl, content_buf, sizeof(content_buf) - 1);
+		content_buf[err] = '\0';
+
+		// save certificate to a local tmp file
+		snprintf(sender_cert_path, sizeof(sender_cert_path),
+				SENDER_CERT_TEMPLATE, username, sender_name);
+		if (!save_content_to_file(content_buf, sender_cert_path)) {
+			fprintf(stderr, "Failed to write sender certificate to file\n");
+			goto CLEANUP;
+		}
+
+		// ---------- Read in the message content ------- //
+
+		memset(content_buf, 0, content_length);
+		err = SSL_read(ssl, content_buf, sizeof(content_buf) - 1);
+		content_buf[err] = '\0';
+
+		// save the encrypted content to a local tmp file
+		sprintf(msg_file_path, ENCRYPTED_MSG_TEMPLATE, username);
+		if (!save_content_to_file(msg_file_path, msg_file_path)) {
+			fprintf(stderr, "Failed to save encrypted, signed content to file\n");
+			goto CLEANUP;
+		}
+		
 		
 	} else {
 		printf("Sorry, the server couldn't send back any messages at this time.\n");
@@ -140,8 +192,6 @@ int main(int argc, char **argv) {
 	}
 
 	// ---- Verify and decrypt the content that the server returned --- //
-	char *msg_file_path = NULL;    // THIS WILL BE THE PATH OF THE SAVED ENCRYPTED/SIGNED CONTENT OF MESSAGE (from server)
-	char *sender_cert_path = NULL; //  THIS WILL BE A PATH TO WHERE THE SENDER'S CERTIFIFCATE IS AVAILABLE (from server) 
 
 	char verified_msg_path_buf[128];
 	sprintf(verified_msg_path_buf, VERIFIED_ENCRYPTED_MSG_TEMPLATE, username);
@@ -165,13 +215,14 @@ int main(int argc, char **argv) {
 	// ------- Print out message contents for the user ------ //
 	FILE *fp = fopen(decrypted_msg_path_buf, "r");
 	if (!fp) {
-		fprinf(stderr, "Could not reopen decrypted file to provide content.\n");
+		fprintf(stderr, "Could not reopen decrypted file to provide content.\n");
 	}
-	
-	fprintf("Here are the contents of your message:\n");
-	while((s = fgetc(fp)) != EOF) {
-      printf("%c", s);
-   	}
+
+	fprintf(stdout, "Here are the contents of your message:\n");
+	char ch;
+	while ((ch = fgetc(fp)) != EOF) {
+		fprintf(stdout, "%c", ch);
+	}
 	fclose(fp);
 
 	// ------- Clean Up -------- //
@@ -379,7 +430,7 @@ int decrypt_message(char *encrypted_msg_path, char *decrypted_msg_path,
 	}
 
     if (!CMS_decrypt(cms, rkey, rcert, NULL, out, 0)) {
-		fprintf("Error occurred while decrypting S/MIME message\n");
+		fprintf(stderr, "Error occurred while decrypting S/MIME message\n");
         goto CLEANUP;
 	}
     err = 0;

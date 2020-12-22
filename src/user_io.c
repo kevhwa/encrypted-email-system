@@ -174,6 +174,5 @@ int get_sendmsg_args(int argc, char *argv[], char buff_path[],
 			current_rcpts_size += 1;
 		}
 	}
-	
-	return data;
+	return 0;
 }

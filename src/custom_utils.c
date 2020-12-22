@@ -1,6 +1,7 @@
 #include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "custom_utils.h"
 
 /**
@@ -15,7 +16,7 @@ int remove_temporary_files_from_mailbox(char *username) {
 	sprintf(path_buf, "mailboxes/%s", username);
 
 	if (!(dir = opendir(path_buf))) {
-		fprintf(stderr, "Could not open directory of mailboxes " 
+		fprintf(stderr, "Could not open directory of mailboxes "
 				"for removing tmp files.\n");
 		return 0;
 	}
@@ -33,5 +34,26 @@ int remove_temporary_files_from_mailbox(char *username) {
 		}
 	}
 	closedir(dir);
+	return 1;
+}
+
+/**
+ * Write null terminated content to file at path specified.
+ */
+int save_content_to_file(char *content_buf, char *path) {
+
+	FILE *p_file = NULL;
+	if (!(p_file = fopen(path, "wb+"))) {
+		printf("Failed to open new file for content\n");
+		return 0;
+	}
+
+	int write = fwrite(content_buf, 1, strlen(content_buf), p_file);
+	fclose(p_file);
+
+	if (write != strlen(content_buf)) {
+		printf("Could not write content to file\n");
+		return 0;
+	}
 	return 1;
 }
