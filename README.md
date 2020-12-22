@@ -93,4 +93,19 @@ This executable allows you to retrieve mail from the server. No arguments are re
 ```
 $ ./bin/recvmsg
 ```
-##
+
+## Testing
+
+There are few test scripts configured...
+
+After running `make install-basic ...` start the server (this will start both server instances, on both ports):
+```
+$ ./bin/start_server.sh
+```
+
+Then you can then run tests via:
+```
+$ ./tests/test_certificate_creation.sh
+$ ./tests/send_msg.sh
+```
+
