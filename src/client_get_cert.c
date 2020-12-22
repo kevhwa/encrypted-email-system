@@ -109,8 +109,7 @@ int main(int argc, char **argv) {
 	EVP_PKEY *p_key;
 
 	if (!(p_key = generate_key(uname))) {
-		fprintf(stderr, "Could not generate RSA keys. "
-				"Are you sure you submitted your username correctly?\n");
+		fprintf(stderr, "Are you sure you submitted your username correctly?\n");
 		SSL_shutdown(ssl);
 		SSL_free(ssl);
 		close(sock);
