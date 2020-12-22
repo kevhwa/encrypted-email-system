@@ -11,7 +11,8 @@ enum server_command {
 	InvalidCommand, 
 	GetCert,
 	ChangePW,
-	SendMsg,
+	SendMsg_Get,
+	SendMsg_Post,
 	RecvMsg,
 	UserCerts
 };
