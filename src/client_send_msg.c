@@ -177,7 +177,7 @@ int main(int argc, char **argv) {
 				for (int i = 0; i < certs_handler->num; i++) {
 					memset(path_buf, '\0', sizeof(path_buf));
 
-					if (strcmp(certs_handler->certificates[i] == NULL))
+					if (certs_handler->certificates[i] == NULL)
 						continue;
 						
 					printf("Attempting to write certificate to file...\n");
@@ -599,14 +599,16 @@ CertificatesHandler* parse_certificates(char *body) {
 		strcpy(certificates_handler->certificates[j], cert_buf);
 		j++;
 	}
+	printf("Got to here..\n");
 
 	// there should be a trailing \n and that's it
-	line = strtok(NULL, "\n");
-	if (strlen(line) != 0) {
-		fprintf(stderr, "The certificates has unexpected leftover content:\n%s\n", line);
+	line = strtok(NULL, "");
+	if (strlen(line) == 0 || !(strlen(line) == 1 && line[0] == '\n')) {
+		fprintf(stderr, "The certificates has unexpected leftover content of len (%lu):\n'%s'\n", strlen(line), line);
 		free_certificates_handler(certificates_handler);
 		return NULL;
 	}
+	printf("Done parsing certs\n");
 	return certificates_handler;
 }
 
