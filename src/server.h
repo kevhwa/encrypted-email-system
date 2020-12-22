@@ -11,8 +11,7 @@ enum server_command {
 	InvalidCommand, 
 	GetCert,
 	ChangePW,
-	SendMsg_Get,
-	SendMsg_Post,
+	SendMsg,
 	RecvMsg,
 	UserCerts
 };
@@ -26,8 +25,8 @@ typedef struct request_handler {
 
 int tcp_listen();
 
+int save_client_msg(char* request_body);
 
-void save_client_msg(char* request_body);
 RequestHandler* handle_recvd_msg(char *buf);
 
 #endif /* SRC_SERVER_H_ */

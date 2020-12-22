@@ -62,7 +62,6 @@ int main(int argc, char **argv) {
 		exit(2);
 	}
 
-	int MAX_RCPT_LENGTH = 20;
 	int MAX_RCPTS_LENGTH = 190;
 	int MAX_PATH_LENGTH = 50;
 
@@ -159,8 +158,12 @@ int main(int argc, char **argv) {
 				char path_buf[100];
 				for (int i = 0; i < certs_handler->num; i++) {
 					memset(path_buf, '\0', sizeof(path_buf));
-
+					// continue if certificates is empty
 					// "mailboxes/meganfrenkel/tmp_derek.pem"
+
+					if(strcmp(certs_handler->certificates[i], "NOCERT") == 0) 
+						continue;
+						
 					snprintf(path_buf, sizeof(path_buf), RECIPIENT_CERT_TEMPLATE,
 							username, certs_handler->recipients[i]);
 
@@ -168,6 +171,7 @@ int main(int argc, char **argv) {
 					fwrite(certs_handler->certificates[i], sizeof(char),
 							sizeof(certs_handler->certificates[i]), tmpfile);
 					fclose(tmpfile);
+					
 				}
 			}
 			free_certificates_handler(certs_handler);
@@ -183,6 +187,12 @@ int main(int argc, char **argv) {
 
 	// ------ Encrypt messages and send them to the server----- //
 	for (int i = 0; i < certs_handler->num; i++) {
+		if(strcmp(certs_handler->certificates[i], "NOCERT") == 0) {
+			printf("Did not receive certificate for recipient '%s'\n", 
+					certs_handler->recipients[i]);
+			continue;
+		}
+		
 
 		char encrypt_msg_path_buf[128];
 		sprintf(encrypt_msg_path_buf, ENCRYPTED_MSG_TEMPLATE, username);
@@ -251,6 +261,9 @@ int main(int argc, char **argv) {
 		}
 		remove_temporary_files_from_mailbox(username);
 	}
+	char end_buf[4096];
+	sprintf(end_buf, "POST /sendmsg HTTP/1.0\nContent-Length: %d\n\n", 0);
+	SSL_write(ssl, end_buf, strlen(end_buf) + 1);
 
 	// ------- Clean Up -------- //
 	CLEANUP:
@@ -329,20 +342,18 @@ int sign_encrypted_message(char *encrypted_msg_path, char *signer_cert_path,
 	fclose(fp);
 
 	/* Open content being signed */
-	in = BIO_new_file(encrypted_msg_path, "r");
-	if (!in) {
+	if (!(in = BIO_new_file(encrypted_msg_path, "r"))) {
 		fprintf(stderr, "Could not open content to be digitally signed\n");
 		goto err;
 	}
+
 	/* Sign content */
-	cms = CMS_sign(scert, skey, NULL, in, flags);
-	if (!cms) {
+	if (!(cms = CMS_sign(scert, skey, NULL, in, flags))) {
 		fprintf(stderr, "Could not sign message content\n");
 		goto err;
 	}
 
-	out = BIO_new_file(signed_msg_path, "w");
-	if (!out) {
+	if (!(out = BIO_new_file(signed_msg_path, "w"))) {
 		fprintf(stderr, "Could not open new file to save digitally signed messsage\n");
 		goto err;
 	}
@@ -457,7 +468,7 @@ void print_usage_information() {
 	fprintf(stderr,
 			"Usage of this program requires specification of the following flag(s):\n"
 					"* [-f] a valid path for the file to be sent\n"
-					"* [-r] a list of recipient usernames for the message\n"
+					"* [-r] a list of recipient usernames for the message (maximum 10)\n"
 					"Example usage: sendmsg -f ./test.txt -r recpt1 recpt2 recpt3\n\n");
 }
 

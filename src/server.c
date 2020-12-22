@@ -12,7 +12,9 @@
 #include <dirent.h>
 #include <sys/time.h>
 
+#ifndef __APPLE__
 #include <crypt.h>  // needs to be included if using linux machine
+#endif
 
 #include "user_io.h"
 #include "create_ctx.h"
@@ -38,6 +40,7 @@ const char *success_template_with_content = "HTTP/1.0 200 Success\nContent-Lengt
 
 int tcp_listen(int port);
 RequestHandler* init_request_handler();
+RequestHandler* handle_recvd_msg(char *buf);
 void free_request_handler(RequestHandler *request_handler);
 int check_credential(char *username, char *submitted_password);
 int parse_credentials_from_request_body(char *request_body, char uname[],
@@ -51,6 +54,7 @@ int read_x509_cert_from_file(char *cert_buf, int size, char *path);
 int rand_serial(ASN1_INTEGER *ai);
 int write_new_password(char *pass, char *path);
 int awaiting_messages_for_client(char *path, char *pending_file_buf, int save_pending_file);
+int64_t get_current_time();
 
 int main(int argc, char **argv) {
 	int err;
@@ -260,32 +264,34 @@ int main(int argc, char **argv) {
 
 		else if (request_handler->command == UserCerts) {
 			// --- Get list of recipients from space-separated request body ---//
-			char** certs_recpts = (char**) malloc(100 * sizeof(char*));
-			char** current = certs_recpts;
+			char certs_recpts[10][20] = {{'\0'}};
+			int pos = 0;
 	
 			char* recipient = strtok(request_handler->request_content, " ");
 			int no_recpts = 0;
 
 			while (recipient != NULL) {
-				if (no_recpts > 100) {
-					// too many recipients
-					for (int l = 0; l < no_recpts; l++) {
-						free(certs_recpts[l]);
-					}
-					free(certs_recpts);
+				if (no_recpts >= 10) {
+					fprintf(stderr, "Too many recipients received, ending session...\n");
 					err = SSL_write(ssl, bad_request_resp, strlen(bad_request_resp));
 					goto CLEANUP;
 				}
-				*current = malloc((strlen(recipient) + 1) * sizeof(char));
-				strcpy(*current, recipient);
-				current++;
+				// is this the maximum username length?
+				if (strlen(recipient) >= 19) {
+					fprintf(stderr, "Skipping recipient %s of invalid length\n", recipient);
+					recipient = strtok(NULL, " ");
+					continue;
+				}
+				fprintf(stdout, "Added recipient %s\n", recipient);
+				strcpy(certs_recpts[pos], recipient);
+				pos++;
 				no_recpts++;
 				recipient = strtok(NULL, " ");
 			}
 			
 			if (no_recpts == 0) {
 				// no recipients
-				free(certs_recpts);
+				fprintf(stderr, "No recipients found, ending session...\n");
 				err = SSL_write(ssl, bad_request_resp, strlen(bad_request_resp));
 				goto CLEANUP;
 			}
@@ -293,7 +299,6 @@ int main(int argc, char **argv) {
 			// --- Construct response body for UserCerts ---//
 			int max_size = 100000;
 			char* response_body = (char*) malloc(sizeof(char) * max_size);
-			memset(response_body, '\0', max_size);
 			snprintf(response_body, max_size, "%d\n", no_recpts);
 			int response_size = strlen(response_body) + 1;
 
@@ -309,38 +314,43 @@ int main(int argc, char **argv) {
 				snprintf(path_buf, sizeof(path_buf), "mailboxes/%s/%s.cert.pem", certs_recpts[i], certs_recpts[i]);
 				cert_fp = fopen(path_buf, "r");
 				if (cert_fp == NULL) {
-					continue;
+					fprintf(stdout, "Could not find certificate for recipient %s\n", certs_recpts[i]);
+					cert_data = "NOCERT";
 				}
-				fseek(f, 0, SEEK_END);
-				file_size = ftell(f); 
-				fseek(f, 0, SEEK_SET); 
-    			
-				cert_data = (char*) malloc(sizeof(char) * (file_size + 1));
-		    	fread(cert_data, sizeof(char), file_size, cert_fp);
-				cert_data[file_size] = '\0';
-				
-				new_size = response_size + strlen(certs_recpts[i]) + file_size + cert_separator_len + 1;
-				if (max_size <= new_size) {
-					response_body = realloc(response_body, 2 * new_size);
-					max_size = 2 * new_size;
-					if (!response_body) {
-						free(response_body);
-						fprintf(stderr, "realloc failed");
-						exit(1);
+				else{
+					fprintf(stdout, "Found certificate for recipient %s\n", certs_recpts[i]);
+					fseek(cert_fp, 0, SEEK_END);
+					file_size = ftell(cert_fp);
+					fseek(cert_fp, 0, SEEK_SET);
+					
+					cert_data = (char*) malloc(sizeof(char) * (file_size + 1));
+					fread(cert_data, sizeof(char), file_size, cert_fp);
+					cert_data[file_size] = '\0';
+					
+					new_size = response_size + strlen(certs_recpts[i]) + file_size + cert_separator_len + 1;
+					if (max_size <= new_size) {
+						response_body = realloc(response_body, 2 * new_size);
+						max_size = 2 * new_size;
+						if (!response_body) {
+							free(response_body);
+							fprintf(stderr, "realloc failed\n");
+							exit(1);
+						}
 					}
 				}
+				
 				strcat(response_body, certs_recpts[i]);
 				strcat(response_body, "\n");
 				strcat(response_body, cert_data);
 				strcat(response_body, cert_separator);
 				response_size = new_size;
-				free(certs_recpts[i]);
-				free(cert_data);
-				fclose(cert_fp);
+				if (cert_fp) {
+					free(cert_data);
+					fclose(cert_fp);
+				}
 			}
-			free(certs_recpts);
 			char content_buf[4096];
-			snprintf(content_buf, success_template, response_size);
+			sprintf(content_buf, success_template, response_size);
 			err = SSL_write(ssl, content_buf, strlen(content_buf));
 			err = SSL_write(ssl, response_body, response_size);
 			free(response_body);
@@ -353,7 +363,8 @@ int main(int argc, char **argv) {
 
 				char *body = (char*) malloc(body_size * sizeof(char));
 				if (body == NULL) {
-					return NULL;
+					fprintf(stderr, "body malloc failed\n");
+					exit(1);
 				}
 				memset(body, '\0', body_size);
 
@@ -367,7 +378,7 @@ int main(int argc, char **argv) {
 						body = realloc(body, 2 * (received + err));
 						if (!body) {
 							free(body);
-							return NULL;
+							exit(1);
 						}
 						body_size = 2 * (received + err);
 					}
@@ -385,54 +396,28 @@ int main(int argc, char **argv) {
 				if (strlen(sendmsg_handler->request_content) == 0) {
 					break;
 				}
-				if (0 == save_client_msg(sendmsg_handler->request_content)) {
-					snprintf(content_buf, success_template, 0);
+				if (save_client_msg(sendmsg_handler->request_content) == 0) {
+					sprintf(content_buf, success_template, 0);
 					err = SSL_write(ssl, content_buf, strlen(content_buf));
 				} else {
-					// write error case
+					sprintf(content_buf, internal_error_resp, 0);
+					err = SSL_write(ssl, content_buf, strlen(content_buf));
 				}
 				free_request_handler(sendmsg_handler);
+				free(body);
 			}
 		}
 		else if (request_handler->command == SendMsg) {
 			// SendMsg should not be called directly
 			err = SSL_write(ssl, bad_request_resp, strlen(bad_request_resp));
 			goto CLEANUP;
-    }
-// 		else if (request_handler->command == SendMsg_Get) {
-// 			//get name of recipient
-// 			char *startreq = request_handler->request_content;
-// 			char *enduname = strchr(startreq, '\n');
-// 			memcpy(uname_buf, startreq, enduname-startreq);
-// 			uname_buf[enduname-startreq] = 0;
-			
-// 			memset(buf, 0, sizeof(buf));
-
-
-// 			char read_certbuf[4096];
-// 			char tmp_buf[100];
-// 			int read_len = 0;
-// 			snprintf(tmp_buf, sizeof(tmp_buf), "mailboxes/%s/%s.cert.pem", uname_buf, uname_buf);
-
-// 			if ((read_len = read_x509_cert_from_file(read_certbuf,
-// 					sizeof(read_certbuf), tmp_buf)) == 0) {
-
-// 				err = SSL_write(ssl, internal_error_resp, strlen(internal_error_resp));
-// 				goto CLEANUP;
-// 			}
-
-// 			char content_buf[4096];
-// 			sprintf(content_buf, success_template, read_len);
-
-// 			err = SSL_write(ssl, content_buf, strlen(content_buf));
-// 			err = SSL_write(ssl, read_certbuf, read_len);
-// 		}
+    	}
 		else if (request_handler->command == RecvMsg) {
 
 			// client making request is only content in request body; if request
 			// body is too long, this doesn't make sense; usernames are always < 20 chars
 			char *requesting_client = request_handler->request_content;
-			if (strlen(requesting_client) > 20) {
+			if (strlen(requesting_client) > 50) {
 				err = SSL_write(ssl, bad_request_resp, strlen(bad_request_resp));
 				goto CLEANUP;
 			}
@@ -457,11 +442,11 @@ int main(int argc, char **argv) {
 				SSL_write(ssl, no_msg_buf, strlen(no_msg_buf));
 				goto CLEANUP;
 			}
-			// ------ Open a file and parse the contents to retrieve information ----- //
 
+			// ------ Open a file and parse the contents to retrieve information ----- //
 			memset(file_path_buf, 0, sizeof(file_path_buf));
 			sprintf(file_path_buf, "mailboxes/%s/%s", requesting_client, filename_buf);
-			FILE *fp = fopen(file_path_buf);
+			FILE *fp = fopen(file_path_buf, "rb+");
 			if (!fp) {
 				err = SSL_write(ssl, internal_error_resp, strlen(internal_error_resp));
 				goto CLEANUP;
@@ -476,8 +461,8 @@ int main(int argc, char **argv) {
 			fread(file_contents, 1, file_size, fp);
 			fclose(fp);
 			
-			// first line of the file will be a new sender
-			char sender[20];
+			// first line of the file will is a sender
+			char sender[50];
 			int i = 0;
 			while (i < file_size && i < sizeof(sender) && file_contents[i] != '\n') {
 				sender[i] = file_contents[i];
@@ -495,13 +480,13 @@ int main(int argc, char **argv) {
 			char *beginning_of_msg_content = &file_contents[++i];
 			
 		   // -------- Read in the sender's certificate ------ //
-			memset(file_path_buf, 0, sizeof(file_path_buf));
+			char cert_path_buf[257];
 			char read_certbuf[4096];
 			int read_len = 0;
-			snprintf(file_path_buf, sizeof(file_path_buf), "mailboxes/%s/%s.cert.pem", sender, sender);
+			snprintf(cert_path_buf, sizeof(cert_path_buf), "mailboxes/%s/%s.cert.pem", sender, sender);
 
 			if ((read_len = read_x509_cert_from_file(read_certbuf,
-					sizeof(read_certbuf), file_path_buf)) == 0) {
+					sizeof(read_certbuf), cert_path_buf)) == 0) {
 
 				err = SSL_write(ssl, internal_error_resp, strlen(internal_error_resp));
 				goto CLEANUP;
@@ -512,8 +497,8 @@ int main(int argc, char **argv) {
 			int content_len = strlen(sender) + read_len + file_size - i;
 			sprintf(success_buf, success_template_with_content, content_len, sender);
 			SSL_write(ssl, success_buf, strlen(success_buf));
-			SSL_write(ssl, beginning_of_msg_content, file_size - i);
 			SSL_write(ssl, read_certbuf, read_len);
+			SSL_write(ssl, beginning_of_msg_content, file_size - i);
 
 			// delete the message once it is sent to the user
 			if (remove(file_path_buf) != 0) {
@@ -866,14 +851,14 @@ RequestHandler* handle_recvd_msg(char *buf) {
 
 	char *getcert = "POST /getcert HTTP/1.0";
 	char *changepw = "POST /changepw HTTP/1.0";
-  char *sendmsg = "POST /sendmsg HTTP/1.0";
-  char *usercerts = "GET /certificates HTTP/1.0";
-  char *recvmsg = "GET /message HTTP/1.0";
+	char *sendmsg = "POST /sendmsg HTTP/1.0";
+	char *usercerts = "GET /certificates HTTP/1.0";
+	char *recvmsg = "GET /message HTTP/1.0";
 
 	// char *sendmsg_get = "GET /sendmsg HTTP/1.0";
 	// char *sendmsg_post = "POST /sendmsg HTTP/1.0";
 
-	RequestHandler *request_handler = init_request_handler();
+	struct RequestHandler *request_handler = init_request_handler();
 	if (!request_handler) {
 		fprintf(stderr, "Could not handle received message.\n");
 		return NULL;
@@ -897,12 +882,9 @@ RequestHandler* handle_recvd_msg(char *buf) {
 	} else if ((strncmp(changepw, line, strlen(changepw) - 3) == 0)
 			&& (strlen(line) == strlen(changepw))) {
 		request_handler->command = ChangePW;
-	} else if ((strncmp(sendmsg_get, line, strlen(sendmsg_get) - 3) == 0)
-			&& (strlen(line) == strlen(sendmsg_get))) {
-		request_handler->command = SendMsg_Get;
-	}else if ((strncmp(sendmsg_get, line, strlen(sendmsg_post) - 3) == 0)
-			&& (strlen(line) == strlen(sendmsg_post))) {
-		request_handler->command = SendMsg_Post;
+	} else if ((strncmp(sendmsg, line, strlen(sendmsg) - 3) == 0)
+			&& (strlen(line) == strlen(sendmsg))) {
+		request_handler->command = SendMsg;
 	} else if ((strncmp(recvmsg, line, strlen(recvmsg) - 3) == 0)
 			&& (strlen(line) == strlen(recvmsg))) {
 		request_handler->command = RecvMsg;
@@ -1099,7 +1081,7 @@ int save_client_msg(char* request_body) {
 	if (!fp) {
 		free(sender);
 		free(recipient);
-		fprintf(stderr, "Could not open file path for recipient %s", recipient);
+		fprintf(stderr, "Could not open file for recipient %s", recipient);
 		return -1;
 	}
 

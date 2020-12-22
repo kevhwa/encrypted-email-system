@@ -113,15 +113,14 @@ int main(int argc, char **argv) {
 		return 3;
 	}
 
-	// -------- Make request to get messages from server -------- //
+	// -------- Make request to get a message from server -------- //
 
-	char content_buf[4000];
 	char obuf[4096];
 	sprintf(obuf, "GET /message HTTP/1.0\nContent-Length: %lu\n\n%s",
 			strlen(username), username);
 	SSL_write(ssl, obuf, strlen(obuf));
 
-	// --------- Get server response and parse the content---------- //
+	// -------- Get server response and parse the content---------//
 
 	char response_buf[4096];
 	char msg_file_path[256];
@@ -129,34 +128,41 @@ int main(int argc, char **argv) {
 	err = SSL_read(ssl, response_buf, sizeof(response_buf) - 1);
 	response_buf[err] = '\0';
 
+	printf("this is the server response: %s", response_buf);
+
 	if (strstr(response_buf, "200 Success")) {
 		
 		// find the content length returned
 		char *line = NULL;
-		char *content_length_val = NULL;
+		char *content_ptr = NULL;
 		int content_length = 0;
 
 		line = strtok(response_buf, "\n"); 
-		line = strtok(NULL, "\n");
-		content_length_val = NULL;
-		if (!(line = strtok(NULL, "\n")) || !(content_length_val = strchr(line, ':'))) {
+		if (!(line = strtok(NULL, "\n")) 
+				|| !(content_ptr = strchr(line, ':'))) {
 			fprintf(stderr, "Server returned unexpected content. "
 				"Your message cannot be delivered\n");
 			goto CLEANUP;
 		}
-		content_length = atoi(content_length_val + 1);
+
+		content_length = atoi(content_ptr + 1);
+		if (content_length == 0) {
+			fprintf(stdout, "You have no unread messages at this time\n");
+		}
 
 		// ----- Parse Sender Information from Request Body ------ //
-
-		if (!(line = strtok(NULL, "")) || strlen(line) < 2 || line[0] != '\n') {
+		//
+		
+		char *remaining_content;
+		if (!(remaining_content = strtok(NULL, "")) || strlen(remaining_content) < 2 || remaining_content[0] != '\n') {
 			fprintf(stderr, "Server returned unexpected content. "
 				"Your message cannot be delivered\n");
 			goto CLEANUP;
 		}
 
-		// rest of the content should be the sender name
-		char *sender_name = &line[1];
-		printf("Recieved message from %s\n!", sender_name);
+		// rest of the content should be the sender name; ignore the \n character
+		char *sender_name = &remaining_content[1];
+		printf("Recieved new message from %s\n!", sender_name);
 
 		// ---------- Read in the sender certificate ------- //
 
@@ -185,7 +191,6 @@ int main(int argc, char **argv) {
 			goto CLEANUP;
 		}
 		
-		
 	} else {
 		printf("Sorry, the server couldn't send back any messages at this time.\n");
 		goto CLEANUP;
@@ -200,13 +205,13 @@ int main(int argc, char **argv) {
 	sprintf(decrypted_msg_path_buf, DECRYPTED_MSG_TEMPLATE, username);
 
 	// Verify the digitally signed message against the sender's certificate
-	if (verify_message(msg_file_path, verified_msg_path_buf, sender_cert_path)) {
+	if (!verify_message(msg_file_path, verified_msg_path_buf, sender_cert_path)) {
 		fprintf(stdout, "Message could not be verified from the sender. Sorry!\n");
 		goto CLEANUP;
 	}
 
 	// Decrypt the message using client's private key
-	if (decrypt_message(verified_msg_path_buf, decrypted_msg_path_buf, 
+	if (!decrypt_message(verified_msg_path_buf, decrypted_msg_path_buf, 
 			certificate_path, private_key_path)) {
 		fprintf(stdout, "Message from server could not be decrypted. Sorry!\n");
 		goto CLEANUP;
@@ -225,7 +230,7 @@ int main(int argc, char **argv) {
 	}
 	fclose(fp);
 
-	// ------- Clean Up -------- //
+	// ------- Clean Up Everything -------- //
 CLEANUP:
 	remove_temporary_files_from_mailbox(username);
 	SSL_shutdown(ssl);
@@ -284,7 +289,7 @@ int verify_message(char *msg_file_path, char *verified_msg_path,
     CMS_ContentInfo *cms = NULL;
     OpenSSL_add_all_algorithms();
     ERR_load_crypto_strings();
-	int err = 1;
+	int err = 0;
 
     // ------ Set up trusted CA certificate store ------ //
 	// WARNING: TRUSTED_CA is a chain-cert. This may need to be changed
@@ -356,7 +361,7 @@ int verify_message(char *msg_file_path, char *verified_msg_path,
     }
 
     fprintf(stderr, "Verification of Sender was Successful\n");
-    err = 0;
+    err = 1;
 
  CLEANUP:
     if (err) {
@@ -388,12 +393,12 @@ int decrypt_message(char *encrypted_msg_path, char *decrypted_msg_path,
     X509 *rcert = NULL;
     EVP_PKEY *rkey = NULL;
     CMS_ContentInfo *cms = NULL;
-    int err = 1;
+    int err = 0;
     OpenSSL_add_all_algorithms();
     ERR_load_crypto_strings();
 
     // ------ Read in recipient (client) certificate and private key --- //
-    if (!(BIO_new_file(client_cert_path, "r"))) {
+    if (!(tbio = BIO_new_file(client_cert_path, "r"))) {
 		fprintf(stderr, "Could not access client certificate file\n");
         goto CLEANUP;
 	}
@@ -433,7 +438,7 @@ int decrypt_message(char *encrypted_msg_path, char *decrypted_msg_path,
 		fprintf(stderr, "Error occurred while decrypting S/MIME message\n");
         goto CLEANUP;
 	}
-    err = 0;
+    err = 1;
 
  CLEANUP:
 
