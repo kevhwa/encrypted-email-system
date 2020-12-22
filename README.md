@@ -24,6 +24,7 @@ To install the program without security features (i.e., install no uses, file sy
 ```
 $ make install-basic DEST=tree
 ```
+For easy testing and debugging, the installation script generates a message-system user for the user installing the system. For example, if a user `charlie` runs the installation script, then `charlie` is a valid message system user. Their password is automatically assigned as `testuser`.
 
 ## Run
 
@@ -44,7 +45,9 @@ $ cd tree/server-dir
 $ ./bin/server -a
 ```
 
-### Run `getcert`
+### Client Programs 
+
+#### Run `getcert`
 
 In order to use either `sendmsg` or `recvmsg`, you'll first need a certificate. With the server already started, in a separate shell, run:
 ```
@@ -55,6 +58,7 @@ $ ./bin/getcert -u username -p password
 Where username is a valid username and password is a valid password for that username. For example:
 ```
 $ ./bin/getcert -u addleness -p Cardin_pwns
+$ ./bin/getcert -u meganfrenkel -p testuser   # user created with installation script and automatically given 'testuser' as password
 ```
 Note that you can also choose to not provide the password and you will be prompted for it:
 ```
@@ -62,7 +66,7 @@ $ ./bin/getcert -u addleness
 Please provide your password (less than 20 characters): 
 ```
 
-### Run `changepw`
+#### Run `changepw`
 
 This executable takes the same set of arguments as `getcert`:
 
@@ -72,14 +76,14 @@ $ ./bin/changepw -u username -p password
 ```
 The program will prompt a user to provide a new password that will be saved for their username.
 
-### Run `sendmsg`
+#### Run `sendmsg`
 
 This executable will allow you to send message content to all specified recipients. Make sure to include the file path to the file containing the message content and pass along the list of recipients:
 ```
 $ ./bin/sendmsg -f ./this-is-a-message-file.txt -r recipient1 recipient2 recipient3"
 ```
 
-### Run `recvmsg`
+#### Run `recvmsg`
 
 This executable allows you to retrieve mail from the server. No arguments are required:
 ```
