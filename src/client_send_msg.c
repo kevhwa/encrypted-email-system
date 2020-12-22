@@ -164,18 +164,23 @@ int main(int argc, char **argv) {
 		printf("Received recipient certificates!\n");
 
 		certs_handler = parse_certificates(server_response);
+
+		printf("Successfully parsed certificates!\n");
 		if (certs_handler != NULL) {
+
 			if (certs_handler->num == 0) {
 				printf("No valid recipients found.\n");
-			} else {
+			}
+			else {
 				FILE *tmpfile;
 				char path_buf[100];
 				for (int i = 0; i < certs_handler->num; i++) {
 					memset(path_buf, '\0', sizeof(path_buf));
 
-					if(strcmp(certs_handler->certificates[i], "NOCERT") == 0) 
+					if (strcmp(certs_handler->certificates[i] == NULL))
 						continue;
 						
+					printf("Attempting to write certificate to file...\n");
 					snprintf(path_buf, sizeof(path_buf), RECIPIENT_CERT_TEMPLATE,
 							username, certs_handler->recipients[i]);
 
@@ -186,6 +191,7 @@ int main(int argc, char **argv) {
 					
 				}
 			}
+			printf("Attempting to free cert handler...\n");
 			free_certificates_handler(certs_handler);
 		} else {
 			printf("Could not parse certificates in response message received from server.\n");
@@ -549,13 +555,13 @@ CertificatesHandler* parse_certificates(char *body) {
 
 		line = strtok(NULL, "\n");
 		if (!strcmp(line, start_cert)) {
-			printf("Found the beginning of the certificate...");
 			memcpy(&cert_buf[cert_len], start_cert, strlen(start_cert));
 			cert_buf[strlen(start_cert)] = '\n';
 			cert_len += (strlen(start_cert) + 1);
 
-		} else if (!strcmp(line, no_cert)){
-			printf("No certificate is available for this recipient..\n");
+		} else if (!strcmp(line, no_cert)) {
+			fprintf(stdout, "No certificate is available for %s recipient..\n",
+					certificates_handler->recipients[j]);
 			certificates_handler->certificates[j] = NULL;
 			line = strtok(NULL, "\n");
 			continue;
@@ -567,26 +573,23 @@ CertificatesHandler* parse_certificates(char *body) {
 		}
 
 		while ((line = strtok(NULL, "\n")) && strcmp(line, end_cert) && cert_len < cert_buf_size) {
-			printf("Found more certificate content..\n.");
 			memcpy(&cert_buf[cert_len], line, strlen(line));
 			cert_buf[cert_len + strlen(line)] = '\n';
 			cert_len += (strlen(line) + 1);
 		}
-
 
 		if (strcmp(line, end_cert)) {
 			// we never found the end of the certificate, sigh...
 			fprintf(stderr, "Certificate contains unexpected content.\n");
 			free_certificates_handler(certificates_handler);
 		} else {
-			printf("Found the end of the certificate...\n");
 			memcpy(&cert_buf[cert_len], end_cert, strlen(end_cert));
 			cert_buf[cert_len + strlen(end_cert)] = '\n';
 			cert_len += (strlen(end_cert) + 1);
 		}
 		cert_buf[cert_len] = '\0';
 
-		printf("This is the certificate line parsed:\n%s\n", cert_buf);
+		printf("This is the certificate parsed:\n%s\n", cert_buf);
 		if (!strlen(cert_buf)) {
 			fprintf(stderr, "Could not return certificate for certificate %d", j);
 			free_certificates_handler(certificates_handler);
@@ -595,11 +598,10 @@ CertificatesHandler* parse_certificates(char *body) {
 		certificates_handler->certificates[j] = malloc((strlen(cert_buf) + 1) * sizeof(char));
 		strcpy(certificates_handler->certificates[j], cert_buf);
 		j++;
-		line = strtok(NULL, "\n"); // go past the new line separator
 	}
-	line = strtok(NULL, "");
 
-	// should be nothing left over at end
+	// there should be a trailing \n and that's it
+	line = strtok(NULL, "\n");
 	if (strlen(line) != 0) {
 		fprintf(stderr, "The certificates has unexpected leftover content:\n%s\n", line);
 		free_certificates_handler(certificates_handler);
