@@ -46,10 +46,12 @@ int main(int argc, char **argv) {
 	}
 
     // prompt user for a new password
-    get_hidden_pw(new_pass, MAX_LENGTH);
+	char msg[100];
+	sprintf(msg, "Please provide a new password (less than %d characters): ", MAX_LENGTH);
+    get_hidden_pw(msg, new_pass, MAX_LENGTH);
     while (strlen(new_pass) < 2 || strlen(new_pass) > 20) {
-        printf("Please choose a password between 2-20 characters");
-        get_hidden_pw(new_pass, MAX_LENGTH);
+        printf("Your password is not a valid length (2-20 characters)");
+        get_hidden_pw(msg, new_pass, MAX_LENGTH);
     }
 
 	// create the SSL context; note that no certificate

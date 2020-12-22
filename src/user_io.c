@@ -10,8 +10,6 @@
 int fill_username_password_from_args(int argc, char *argv[], char buff_pass[],
 		char buff_user[], int max_len);
 
-void get_hidden_pw(char *password, int max_len);
-
 /**
  * Fills buff_pass and buff_user buffers for password and username with
  * content from submitted args, and/or prompts user for password.
@@ -30,7 +28,10 @@ int get_username_password(int argc, char *argv[], char buff_pass[],
 	}
 
 	if (strlen(buff_pass) == 0) {
-		get_hidden_pw(buff_pass, max_len);
+		// format a message
+		char msg_buf[100];
+		sprintf(msg_buf, "Please provide your password (less than %s characters): ", max_len);
+		get_hidden_pw(msg_buf, buff_pass, max_len);
 	}
 	return 0;
 }
@@ -84,13 +85,13 @@ int fill_username_password_from_args(int argc, char *argv[], char buff_pass[],
 /**
  * Get a password from a user (hidden) on the command line.
  */
-void get_hidden_pw(char *password, int max_len) {
+void get_hidden_pw(char *msg, char *password, int max_len) {
 
 	static struct termios old_terminal;
 	static struct termios new_terminal;
 
 	memset(password, 0, max_len);
-	printf("Please provide your password (less than %d characters): ", max_len);
+	fprintf(stdout, msg);
 
 	// get settings of the actual terminal
 	tcgetattr(STDIN_FILENO, &old_terminal);
