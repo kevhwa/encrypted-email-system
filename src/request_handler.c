@@ -152,7 +152,6 @@ RequestHandler* handle_recvd_msg(char *buf) {
  * Receives an HTTP response body using SSL_read.
  */
 char* receive_ssl_response(SSL *ssl) {
-	printf("In receive_ssl_response()...\n");
 
 	char buf[4096];
 	int err = SSL_read(ssl, buf, sizeof(buf) - 1);
@@ -175,11 +174,12 @@ char* receive_ssl_response(SSL *ssl) {
 		return NULL;
 	}
 
-	line = strtok(header, "\n");
+	line = strtok(NULL, "\n");
 	char *content_length_headername = "content-length:";
 	if (line == NULL
 			|| strncasecmp(content_length_headername, line,
 					strlen(content_length_headername)) != 0) {
+		printf("Server response header contained unexpected content\n");
 		return NULL;
 	}
 	char *content_length_val = strchr(line, ':');
@@ -204,6 +204,8 @@ char* receive_ssl_response(SSL *ssl) {
 	memset(body, '\0', content_length + 1);
 
 	int received = 0;
+
+	printf("Ready to receive server certificate content...\n");
 	while (received < content_length) {
 		memset(buf, '\0', sizeof(buf));
 		err = SSL_read(ssl, buf, sizeof(buf) - 1);
@@ -212,6 +214,8 @@ char* receive_ssl_response(SSL *ssl) {
 			break;
 		strcat(body, buf);
 		received += err;
+
+		printf("Received %d so far, expecting %d\n", received, content_length);
 	}
 	return body;
 }

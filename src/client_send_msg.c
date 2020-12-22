@@ -498,8 +498,10 @@ void print_usage_information() {
 CertificatesHandler* parse_certificates(char *body) {
 	CertificatesHandler *certificates_handler;
 
-	if (!(certificates_handler = (CertificatesHandler*) malloc(
-			sizeof(CertificatesHandler)))) {
+	printf("** Attempting to parse certificates...\n");
+	printf("This is the body retrieved:\n%s\n", body);
+
+	if (!(certificates_handler = (CertificatesHandler*) malloc(sizeof(CertificatesHandler)))) {
 		fprintf(stderr, "Could not create certificates handler for request.\n");
 		return NULL;
 	}
@@ -515,25 +517,34 @@ CertificatesHandler* parse_certificates(char *body) {
 		free_certificates_handler(certificates_handler);
 		return NULL;
 	}
+	printf("Parsing %d certificates...\n", num_certs);
+
 	certificates_handler->num = num_certs;
 	certificates_handler->certificates = (char**) malloc((num_certs) * sizeof(char*));
 	certificates_handler->recipients = (char**) malloc((num_certs) * sizeof(char*));
+
 	int j = 0;
 	while (j < num_certs) {
+
 		// next line should be the recipient name
 		line = strtok(NULL, "\n");
+		printf("This is the recipient line parsed:\n%s\n", line);
 		if (line == NULL) {
-			fprintf(stderr, "could not return recipient for certificate %d", j);
+			fprintf(stderr, "Could not return recipient for certificate %d", j);
 			free_certificates_handler(certificates_handler);
 			return NULL;
 		}
+
+		// save name of the recipient
 		certificates_handler->recipients[j] = malloc((strlen(line) + 1) * sizeof(char));
 		strcpy(certificates_handler->recipients[j], line);
 
-		// followed by the certificate
+		// save the content of the corresponding cert
 		line = strtok(NULL, "\n\nENDCERT\n\n");
+
+		printf("This is the certificate line parsed:\n%s\n", line);
 		if (line == NULL) {
-			fprintf(stderr, "could not return certificate for certificate %d", j);
+			fprintf(stderr, "Could not return certificate for certificate %d", j);
 			free_certificates_handler(certificates_handler);
 			return NULL;
 		}
@@ -545,7 +556,7 @@ CertificatesHandler* parse_certificates(char *body) {
 
 	// should be nothing left over at end
 	if (strlen(line) != 0) {
-		fprintf(stderr, "certificates has leftover %s", line);
+		fprintf(stderr, "The certificates has unexpected leftover content:\n%s\n", line);
 		free_certificates_handler(certificates_handler);
 		return NULL;
 	}

@@ -81,7 +81,11 @@ int main(int argc, char **argv) {
 	tv.tv_sec = 5;
 	tv.tv_usec = 0;
 
-	fprintf(stdout, "\nServer started!\n");
+	if (port == NO_AUTH_PORT) {
+		fprintf(stdout, "\nServer started (username/password required)!\n");
+	} else {
+		fprintf(stdout, "\nServer started (client certificate checks enabled)!\n");
+	}
 
 	for (;;) {
 		struct sockaddr_in client_addr;
@@ -284,7 +288,7 @@ int main(int argc, char **argv) {
 					goto CLEANUP;
 				}
 				// recipient should not exceed max length acceptable length
-				if (strlen(recipient) >= 20 || strlen(recipient < 5)) {
+				if (strlen(recipient) >= 20 || strlen(recipient) < 5) {
 					fprintf(stderr, "Skipping recipient %s of invalid length\n", recipient);
 					recipient = strtok(NULL, " ");
 					continue;
