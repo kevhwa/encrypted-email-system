@@ -334,22 +334,27 @@ int main(int argc, char **argv) {
 			for (int i = 0; i < no_recpts; i++) {
 				memset(path_buf, '\0', sizeof(path_buf));
 				snprintf(path_buf, sizeof(path_buf), "mailboxes/%s/%s.cert.pem", certs_recpts[i], certs_recpts[i]);
+
+				fprintf("Looking for certificate of recipient '%s' here: %s\n", certs_recpts[i], path_buf);
+
 				cert_fp = fopen(path_buf, "r");
-				if (cert_fp == NULL) {
-					fprintf(stdout, "Could not find certificate for recipient %s\n", certs_recpts[i]);
+				if (!cert_fp) {
+					fprintf(stdout,
+							"Could not find certificate for recipient %s\n",
+							certs_recpts[i]);
 					cert_data = "NOCERT";
-				}
-				else{
+				} else {
 					fprintf(stdout, "Found certificate for recipient %s\n", certs_recpts[i]);
 					fseek(cert_fp, 0, SEEK_END);
 					file_size = ftell(cert_fp);
 					fseek(cert_fp, 0, SEEK_SET);
-					
+
 					cert_data = (char*) malloc(sizeof(char) * (file_size + 1));
 					fread(cert_data, sizeof(char), file_size, cert_fp);
 					cert_data[file_size] = '\0';
 				}
-				new_size = response_size + strlen(certs_recpts[i]) + strlen(cert_data) + cert_separator_len + 1;
+				new_size = response_size + strlen(certs_recpts[i])
+						+ strlen(cert_data) + cert_separator_len + 1;
 				if (max_size <= new_size) {
 					response_body = realloc(response_body, 2 * new_size);
 					max_size = 2 * new_size;
@@ -374,6 +379,7 @@ int main(int argc, char **argv) {
 			sprintf(content_buf, success_template, response_size);
 			err = SSL_write(ssl, content_buf, strlen(content_buf));
 			err = SSL_write(ssl, response_body, response_size);
+
 			fprintf(stdout, "Sent certificates:\n---\n%s%s\n---\n", content_buf, response_body);
 			free(response_body);
 

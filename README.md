@@ -15,7 +15,7 @@ Create the encrypted messaging system with the following make command. This will
 $ make install-with-security DEST=tree
 ```
 
-Note: please make sure that the tree specified does not already exist. If it does:
+**Please make sure that the tree specified does not already exist.** If it does:
 ```
 $ sudo rm -rf tree
 ```
@@ -32,11 +32,11 @@ For easy testing and debugging, the installation script generates a message-syst
 
 If you installed the system using `make install-with-security`, the sandboxing setup should have brought you to the server directory, `server-dir`. Otherwise, if you installed the system with `make install-basic` then `cd` into the correct directory. The server needs to be run with client authentication and without (these will listen on different ports). Hence, to run the server:
 ```
-$ ./bin/server  # start the server that doesn't verify client certs
+$ ./bin/server  # start the server instance that doesn't verify client certs (port 8080)
 ```
 And in a separate shell:
 ```
-$ ./bin/server -a  # start the server that does verify client certs
+$ ./bin/server -a  # start the server that does verify client certs (port 8081)
 ```
 Note that if you ran `make install-with-security`, you will need to use `sudo` to cd into the `server-dir`:
 ```
@@ -80,7 +80,11 @@ The program will prompt a user to provide a new password that will be saved for 
 
 This executable will allow you to send message content to all specified recipients. Make sure to include the file path to the file containing the message content and pass along the list of recipients:
 ```
-$ ./bin/sendmsg -f ./this-is-a-message-file.txt -r recipient1 recipient2 recipient3"
+$ cd tree/client-dir
+$ echo "This is a test message" > ./mailboxes/meganfrenkel/test.txt
+```
+```
+$ ./bin/sendmsg -f ./mailboxes/meganfrenkel/test.txt -r addleness analects polypose
 ```
 
 #### Run `recvmsg`
@@ -89,4 +93,4 @@ This executable allows you to retrieve mail from the server. No arguments are re
 ```
 $ ./bin/recvmsg
 ```
-
+##

@@ -149,6 +149,9 @@ int main(int argc, char **argv) {
 	sprintf(obuf, "GET /certificates HTTP/1.0\nContent-Length: %lu\n\n%s\n",
 			strlen(rcpts) + 1, rcpts);
 
+	printf("This is the buffer sent to the server: %s\n", obuf);
+	printf("These are the recipients: %s\n", rcpts);
+
 	SSL_write(ssl, obuf, strlen(obuf));
 
 	// --------- Get server response ---------- //
