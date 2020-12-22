@@ -430,7 +430,7 @@ int encrypt_message(char *msg_path, char *rcpt_cert_path, char *encrypted_msg_pa
 	X509 *rcert = NULL;
 	STACK_OF(X509) *recips = NULL;
 	CMS_ContentInfo *cms = NULL;
-	int ret = 1;
+	int success = 0;
 	int flags = CMS_STREAM;
 	OpenSSL_add_all_algorithms();
 	ERR_load_crypto_strings();

@@ -17,7 +17,8 @@ enum server_command {
 	ChangePW,
 	SendMsg,
 	RecvMsg,
-	UserCerts
+	UserCerts,
+	SuccessResponse,
 };
 
 typedef struct request_handler {

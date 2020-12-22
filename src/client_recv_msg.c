@@ -14,6 +14,7 @@
 #include <openssl/pem.h>
 #include <openssl/cms.h>
 #include <openssl/x509.h>
+#include <pwd.h>
 
 #include "create_ctx.h"
 #include "user_io.h"
@@ -44,10 +45,13 @@ int main(int argc, char **argv) {
 
 	// figure out who the user is so that their certificate and key can be configured
 	char *username;
-	if (!(username = getlogin())) {
+	struct passwd *pass; 
+	pass = getpwuid(getuid()); 
+	username = pass->pw_name;
+	if (!username) {
 		printf("Failed to determine identify of user.\n");
-	 	exit(1);
-	}
+		exit(1);
+ 	}
 
 	char certificate_path[256];
 	char private_key_path[256];
@@ -128,7 +132,7 @@ int main(int argc, char **argv) {
 	err = SSL_read(ssl, response_buf, sizeof(response_buf) - 1);
 	response_buf[err] = '\0';
 
-	printf("this is the server response: %s", response_buf);
+	printf("This is the server response:\n%s\n", response_buf);
 
 	if (strstr(response_buf, "200 Success")) {
 		
@@ -164,7 +168,7 @@ int main(int argc, char **argv) {
 
 		// rest of the content should be the sender name; ignore the \n character
 		char *sender_name = &remaining_content[1];
-		printf("Recieved new message from %s\n!", sender_name);
+		printf("Received new message from %s!\n", sender_name);
 
 		// ---------- Read in the sender certificate ------- //
 
@@ -188,7 +192,7 @@ int main(int argc, char **argv) {
 
 		// save the encrypted content to a local tmp file
 		sprintf(msg_file_path, ENCRYPTED_MSG_TEMPLATE, username);
-		if (!save_content_to_file(msg_file_path, msg_file_path)) {
+		if (!save_content_to_file(content_buf, msg_file_path)) {
 			fprintf(stderr, "Failed to save encrypted, signed content to file\n");
 			goto CLEANUP;
 		}
@@ -226,15 +230,17 @@ int main(int argc, char **argv) {
 	}
 
 	fprintf(stdout, "Here are the contents of your message:\n");
+	fprintf(stdout, "--------------------------------------\n");
 	char ch;
 	while ((ch = fgetc(fp)) != EOF) {
 		fprintf(stdout, "%c", ch);
 	}
 	fclose(fp);
+	fprintf(stdout, "--------------------------------------\n");
 
 	// ------- Clean Up Everything -------- //
 CLEANUP:
-	remove_temporary_files_from_mailbox(username);
+	// remove_temporary_files_from_mailbox(username);
 	SSL_shutdown(ssl);
 	SSL_free(ssl);
 	close(sock);
@@ -283,32 +289,49 @@ int tcp_connection(char *host_name, int port) {
 int verify_message(char *msg_file_path, char *verified_msg_path, 
 		char *sender_cert_path) {
 
-    BIO *in = NULL, *out = NULL, *sender = NULL, *tbio = NULL, *cont = NULL;
+    BIO *in = NULL, *out = NULL, *sender = NULL, *tbio = NULL, *cont = NULL, *tbio_inter = NULL;
     X509_STORE *st = NULL;
-    X509 *ca_cert = NULL;
+    X509 *root_ca_cert = NULL;
+	X509 *intermediate_ca_cert = NULL;
 	X509 *sender_cert = NULL;
 	STACK_OF(X509) *sender_stack = NULL;
     CMS_ContentInfo *cms = NULL;
     OpenSSL_add_all_algorithms();
     ERR_load_crypto_strings();
-	int err = 0;
+	int success = 0;
 
     // ------ Set up trusted CA certificate store ------ //
-	// WARNING: TRUSTED_CA is a chain-cert. This may need to be changed
-	// to use the individual intermediate ca certificate instead.
+	st = X509_STORE_new(); // hold trusted CA certs in CA store
+	
+	// --- Push root ca to trusted stack
 
-    st = X509_STORE_new();
-    if (!(tbio = BIO_new_file(TRUSTED_CA, "r"))) {
-		fprintf(stderr, "Could not setup trusted CA certificate store\n");
+    if (!(tbio = BIO_new_file("trusted_ca/root.cert.pem", "r"))) {
+		fprintf(stderr, "Could open file containg root CA certificate\n");
         goto CLEANUP;
 	}
     
-    if (!(ca_cert = PEM_read_bio_X509(tbio, NULL, 0, NULL))) {
-		fprintf(stderr, "Could not read X509 cert from CA certificate\n");
+    if (!(root_ca_cert = PEM_read_bio_X509(tbio, NULL, 0, NULL))) {
+		fprintf(stderr, "Could not read X509 cert from root CA certificate\n");
         goto CLEANUP;
 	}
-    if (!X509_STORE_add_cert(st, ca_cert)) {
-		fprintf(stderr, "Could not add certificate to trusted CA store\n");
+    if (!X509_STORE_add_cert(st, root_ca_cert)) {
+		fprintf(stderr, "Could not add root certificate to trusted CA store\n");
+        goto CLEANUP;
+	}
+
+	// --- Push intermediate ca to trusted stack
+
+    if (!(tbio_inter = BIO_new_file("trusted_ca/intermediate.cert.pem", "r"))) {
+		fprintf(stderr, "Could not open file containing intermediate CA certificate\n");
+        goto CLEANUP;
+	}
+    
+    if (!(intermediate_ca_cert = PEM_read_bio_X509(tbio_inter, NULL, 0, NULL))) {
+		fprintf(stderr, "Could not read X509 cert from intermediate CA certificate\n");
+        goto CLEANUP;
+	}
+    if (!X509_STORE_add_cert(st, intermediate_ca_cert)) {
+		fprintf(stderr, "Could not add intermediate certificate to trusted CA store\n");
         goto CLEANUP;
 	}
 
@@ -344,7 +367,7 @@ int verify_message(char *msg_file_path, char *verified_msg_path,
 	}
 
     if (!(cms = SMIME_read_CMS(in, &cont))) {
-		fprintf(stderr, "Could not parse message from CMS");
+		fprintf(stderr, "Could not parse message from CMS\n");
         goto CLEANUP;
 	}
 
@@ -361,12 +384,10 @@ int verify_message(char *msg_file_path, char *verified_msg_path,
         fprintf(stderr, "Verification of Sender Failed\n");
         goto CLEANUP;
     }
-
-    fprintf(stderr, "Verification of Sender was Successful\n");
     err = 1;
 
  CLEANUP:
-    if (err) {
+    if (!success) {
         fprintf(stderr, "Error Verifying Data\n");
         ERR_print_errors_fp(stderr);
     }
@@ -374,12 +395,14 @@ int verify_message(char *msg_file_path, char *verified_msg_path,
     CMS_ContentInfo_free(cms);
 	X509_free(sender_cert);
 	sk_X509_pop_free(sender_stack, X509_free);
-    X509_free(ca_cert);
+    X509_free(root_ca_cert);
+	X509_free(intermediate_ca_cert);
     BIO_free(in);
     BIO_free(out);
     BIO_free(tbio);
+	BIO_free(tbio_inter);
 	BIO_free(sender);
-    return err;
+    return success;
 }
 /**
  * Decrypts an encrypted message using the client's private key located
@@ -395,7 +418,7 @@ int decrypt_message(char *encrypted_msg_path, char *decrypted_msg_path,
     X509 *rcert = NULL;
     EVP_PKEY *rkey = NULL;
     CMS_ContentInfo *cms = NULL;
-    int err = 0;
+    int success = 0;
     OpenSSL_add_all_algorithms();
     ERR_load_crypto_strings();
 
@@ -440,11 +463,11 @@ int decrypt_message(char *encrypted_msg_path, char *decrypted_msg_path,
 		fprintf(stderr, "Error occurred while decrypting S/MIME message\n");
         goto CLEANUP;
 	}
-    err = 1;
+    success = 1;
 
  CLEANUP:
 
-    if (err) {
+    if (!success) {
         fprintf(stderr, "Error Decrypting Data\n");
         ERR_print_errors_fp(stderr);
     }
@@ -455,5 +478,5 @@ int decrypt_message(char *encrypted_msg_path, char *decrypted_msg_path,
     BIO_free(in);
     BIO_free(out);
     BIO_free(tbio);
-    return err;
+    return success;
 }

@@ -382,7 +382,15 @@ int main(int argc, char **argv) {
 			char content_buf[4096];
 			sprintf(content_buf, success_template, response_size);
 			err = SSL_write(ssl, content_buf, strlen(content_buf));
+			if (err <= 0) {
+				fprintf(stdout, "Failed to send response header for GET /certificates\n");
+				goto CLEANUP;
+			}
 			err = SSL_write(ssl, response_body, response_size);
+			if (err <= 0) {
+				fprintf(stdout, "Failed to send response body for GET /certificates\n");
+				goto CLEANUP;
+			}
 
 			fprintf(stdout, "Sent certificates:\n---\n%s%s\n---\n", content_buf, response_body);
 			fflush(stdout);
@@ -476,6 +484,7 @@ int main(int argc, char **argv) {
 
 			// Get the start of the message content
 			char *beginning_of_msg_content = &file_contents[++i];
+			printf("Message content to be sent back to the client:\n%s\n", beginning_of_msg_content);
 			
 		   // -------- Read in the sender's certificate ------ //
 			char cert_path_buf[257];
@@ -499,9 +508,9 @@ int main(int argc, char **argv) {
 			SSL_write(ssl, beginning_of_msg_content, file_size - i);
 
 			// delete the message once it is sent to the user
-			if (remove(file_path_buf) != 0) {
-				fprintf(stderr, "Read file could not be removed from server!\n");
-			}
+			// if (remove(file_path_buf) != 0) {
+			// 	fprintf(stderr, "Read file could not be removed from server!\n");
+			// }
 		}
 
 		CLEANUP: 

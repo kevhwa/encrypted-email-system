@@ -20,4 +20,4 @@ echo -e "\n**** 1. Attempting to send a message to two users with valid certific
 
 echo "This is a test message" > ./mailboxes/addleness/test.txt
 
-./bin/sendmsg -f ./mailboxes/addleness/test.txt -r analects polypose
+./bin/sendmsg -f ./mailboxes/addleness/test.txt -r $USER analects polypose
