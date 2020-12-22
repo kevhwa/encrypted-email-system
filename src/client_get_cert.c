@@ -109,8 +109,12 @@ int main(int argc, char **argv) {
 	EVP_PKEY *p_key;
 
 	if (!(p_key = generate_key(uname))) {
-		fprintf(stderr, "Could not generate RSA keys.\n");
-		exit(1);
+		fprintf(stderr, "Could not generate RSA keys. "
+				"Are you sure you submitted your username correctly?\n");
+		SSL_shutdown(ssl);
+		SSL_free(ssl);
+		close(sock);
+		return 1;
 	}
 
 	// ------------ Generate CSR ------------- //
@@ -118,7 +122,10 @@ int main(int argc, char **argv) {
 	if (!cert_size) {
 		fprintf(stderr, "Could not generate X509 certificate REQ.\n");
 		EVP_PKEY_free(p_key);
-		exit(1);
+		SSL_shutdown(ssl);
+		SSL_free(ssl);
+		close(sock);
+		return 2;
 	}
 	char cert_buf[cert_size + 1];
 	read_x509_req_from_file(uname, cert_buf, cert_size);

@@ -335,7 +335,7 @@ int main(int argc, char **argv) {
 				memset(path_buf, '\0', sizeof(path_buf));
 				snprintf(path_buf, sizeof(path_buf), "mailboxes/%s/%s.cert.pem", certs_recpts[i], certs_recpts[i]);
 
-				fprintf("Looking for certificate of recipient '%s' here: %s\n", certs_recpts[i], path_buf);
+				fprintf(stdout, "Looking for certificate of recipient '%s' here: %s\n", certs_recpts[i], path_buf);
 
 				cert_fp = fopen(path_buf, "r");
 				if (!cert_fp) {
