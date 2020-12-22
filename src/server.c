@@ -284,7 +284,7 @@ int main(int argc, char **argv) {
 					goto CLEANUP;
 				}
 				// recipient should not exceed max length acceptable length
-				if (strlen(recipient) >= 19) {
+				if (strlen(recipient) >= 20 || strlen(recipient < 5)) {
 					fprintf(stderr, "Skipping recipient %s of invalid length\n", recipient);
 					recipient = strtok(NULL, " ");
 					continue;
@@ -339,22 +339,21 @@ int main(int argc, char **argv) {
 
 				cert_fp = fopen(path_buf, "r");
 				if (!cert_fp) {
-					fprintf(stdout,
-							"Could not find certificate for recipient %s\n",
-							certs_recpts[i]);
+					fprintf(stdout, "Could not find certificate for recipient '%s'\n", certs_recpts[i]);
 					cert_data = "NOCERT";
-				} else {
+				}
+				else {
 					fprintf(stdout, "Found certificate for recipient %s\n", certs_recpts[i]);
 					fseek(cert_fp, 0, SEEK_END);
 					file_size = ftell(cert_fp);
 					fseek(cert_fp, 0, SEEK_SET);
-
 					cert_data = (char*) malloc(sizeof(char) * (file_size + 1));
 					fread(cert_data, sizeof(char), file_size, cert_fp);
 					cert_data[file_size] = '\0';
 				}
 				new_size = response_size + strlen(certs_recpts[i])
 						+ strlen(cert_data) + cert_separator_len + 1;
+
 				if (max_size <= new_size) {
 					response_body = realloc(response_body, 2 * new_size);
 					max_size = 2 * new_size;

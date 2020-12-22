@@ -168,11 +168,14 @@ int get_sendmsg_args(int argc, char *argv[], char buff_path[],
 				return -1;
 			}
 
+			printf("Coping recipient %s into recipient list...", argv[i]);
 			memcpy(&buff_rcpts[current_rcpts_size], argv[i], strlen(argv[i]));
 			current_rcpts_size += strlen(argv[i]);
 			buff_rcpts[current_rcpts_size] = ' ';
-			buff_rcpts[current_rcpts_size] = '\0';
+			buff_rcpts[current_rcpts_size + 1] = '\0';
 			current_rcpts_size += 1;
+
+			printf("Current contents of recipient list:\n%s\n", buff_rcpts);
 		}
 	}
 	return 0;

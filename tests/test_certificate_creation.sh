@@ -41,17 +41,10 @@ echo -e "\n***8. Making a request to change password for non-existent user... Th
 
 echo "tester" | ./bin/changepw -u bad_user -p badpass
 
-echo -e "***9. Attemping to run getcert executable without the correct arguments... This should report correct usage.***\n"
+echo -e "\n***9. Attemping to run getcert executable without the correct arguments... This should report correct usage.***\n"
 
 ./bin/getcert -k bad
 
 echo -e "***10. Attemping to run changepw executable without the correct arguments... This should report correct usage.***\n"
 
 ./bin/changepw -k bad
-
-echo -e "\n**** Now creating certificates for several mailbox users for further testing****\n"
-
-./bin/getcert -u addleness -p Cardin_pwns
-./bin/getcert -u analects -p pickerel_symbiosis
-./bin/getcert -u dysphasia -p equably_undies
-./bin/getcert -u polypose -p lure_leagued

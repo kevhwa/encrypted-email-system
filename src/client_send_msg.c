@@ -146,15 +146,17 @@ int main(int argc, char **argv) {
 
 	// -------- Provide content to server -------- //
 	char obuf[4096];
-	sprintf(obuf, "GET /certificates HTTP/1.0\nContent-Length: %lu\n\n%s\n",
+	sprintf(obuf, "GET /certificates HTTP/1.0\nContent-Length: %lu\n\n%s",
 			strlen(rcpts) + 1, rcpts);
 
-	printf("This is the buffer sent to the server: %s\n", obuf);
+	printf("This is the buffer sent to the server:\n%s\n", obuf);
 	printf("These are the recipients: %s\n", rcpts);
 
 	SSL_write(ssl, obuf, strlen(obuf));
 
 	// --------- Get server response ---------- //
+
+	printf("Ready to receive server response...\n");
 	char *server_response = receive_ssl_response(ssl);
 	CertificatesHandler *certs_handler = NULL;
 
@@ -170,8 +172,6 @@ int main(int argc, char **argv) {
 				char path_buf[100];
 				for (int i = 0; i < certs_handler->num; i++) {
 					memset(path_buf, '\0', sizeof(path_buf));
-					// continue if certificates is empty
-					// "mailboxes/meganfrenkel/tmp_derek.pem"
 
 					if(strcmp(certs_handler->certificates[i], "NOCERT") == 0) 
 						continue;
@@ -198,6 +198,9 @@ int main(int argc, char **argv) {
 	}
 
 	// ------ Encrypt messages and send them to the server----- //
+
+	printf("Encrypting messages to send to server...\n");
+
 	for (int i = 0; i < certs_handler->num; i++) {
 		if(strcmp(certs_handler->certificates[i], "NOCERT") == 0) {
 			printf("Did not receive certificate for recipient '%s'\n", 
@@ -205,7 +208,6 @@ int main(int argc, char **argv) {
 			continue;
 		}
 		
-
 		char encrypt_msg_path_buf[128];
 		sprintf(encrypt_msg_path_buf, ENCRYPTED_MSG_TEMPLATE, username);
 
@@ -218,6 +220,8 @@ int main(int argc, char **argv) {
 			goto CLEANUP;
 		}
 
+		printf("Successfully encrypted messages...\n");
+
 		char signed_msg_path_buf[128];
 		sprintf(signed_msg_path_buf, SIGNED_MSG_TEMPLATE, username);
 		if (sign_encrypted_message(encrypt_msg_path_buf, certificate_path,
@@ -225,6 +229,8 @@ int main(int argc, char **argv) {
 			fprintf(stderr, "Digital signature step failed...\n");
 			goto CLEANUP;
 		}
+
+		printf("Successfully signed messages...\n");
 
 		// ----- Send the content in signed_msg_path_buf to the server ------//
 		// read in signed, encrypted content from file
@@ -256,6 +262,8 @@ int main(int argc, char **argv) {
 		sprintf(content_buf,
 				"POST /sendmsg HTTP/1.0\nContent-Length: %d\n\n%s\n%s\n%s",
 				body_len, username, certs_handler->recipients[i], file_buf);
+
+		printf("Passing encrypted message back to server...\n");
 
 		SSL_write(ssl, content_buf, strlen(content_buf));
 
