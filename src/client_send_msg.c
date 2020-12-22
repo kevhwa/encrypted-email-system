@@ -14,9 +14,11 @@
 #include <openssl/pem.h>
 #include <openssl/x509.h>
 #include <openssl/cms.h>
+#include <dirent.h>
 
 #include "create_ctx.h"
 #include "user_io.h"
+#include "custom_utils.c"
 
 #define h_addr h_addr_list[0] /* for backward compatibility */
 #define TRUSTED_CA "trusted_ca/ca-chain.cert.pem"
@@ -53,8 +55,6 @@ int main(int argc, char **argv) {
 	char private_key_path[256];
 	sprintf(certificate_path, CERT_LOCATION_TEMPLATE, username, username);
 	sprintf(private_key_path, PRIVATE_KEY_TEMPLATE, username, username);
-
-
 
 	if (!(ctx = create_ctx_client(certificate_path, private_key_path, TRUSTED_CA, 1))) {
 		fprintf(stderr, "Please make sure that you have a private key and certificate "
@@ -149,7 +149,7 @@ int main(int argc, char **argv) {
 
 	if (server_response) {
 		printf("Received recipient certificates!\n");
-		// char *file_data = get_file_data(fp);
+
 		certs_handler = parse_certificates(server_response);
 		if (certs_handler != NULL) {
 			if (certs_handler->num == 0) {
@@ -159,9 +159,10 @@ int main(int argc, char **argv) {
 				char path_buf[100];
 				for (int i = 0; i < certs_handler->num; i++) {
 					memset(path_buf, '\0', sizeof(path_buf));
+
+					// "mailboxes/meganfrenkel/tmp_derek.pem"
 					snprintf(path_buf, sizeof(path_buf), RECIPIENT_CERT_TEMPLATE,
-							certs_handler->recipients[i],
-							certs_handler->recipients[i]);
+							username, certs_handler->recipients[i]);
 
 					tmpfile = fopen(path_buf, "w");
 					fwrite(certs_handler->certificates[i], sizeof(char),
@@ -188,7 +189,7 @@ int main(int argc, char **argv) {
 
 		char rcpt_cert_buf[128];
 		snprintf(rcpt_cert_buf, sizeof(rcpt_cert_buf), RECIPIENT_CERT_TEMPLATE,
-				certs_handler->recipients[i], certs_handler->recipients[i]);
+				username, certs_handler->recipients[i]);
 
 		if (encrypt_message(path, rcpt_cert_buf, encrypt_msg_path_buf)) {
 			fprintf(stderr, "Encryption step failed for %s\n", rcpt_cert_buf);
@@ -207,7 +208,7 @@ int main(int argc, char **argv) {
 		// read in signed, encrypted content from file
 		FILE *fp;
 		if (!(fp = fopen(signed_msg_path_buf, "rb+"))) {
-			fprintf(stderr,"Could not open digitally signed and encrypted message\n");
+			fprintf(stderr,"Could not open digitally signed and encrypted message file\n");
 			goto CLEANUP;
 		}
 		fseek(fp, 0L, SEEK_END);     // go to the end of the file
@@ -221,20 +222,36 @@ int main(int argc, char **argv) {
 
 		// send the content to server... content formatted as:
 		//
-		// POST /newmsg HTTP/1.0
+		// POST /sendmsg HTTP/1.0
 		// Content-Length: X
 		//
-		// sender
+		// sender 
 		// recipient
-		// encrypted_msg_content....
-		char content_buf[128 + n_bytes];
-		int body_len = strlen(certs_handler->recipients[i]) + strlen(username) + strlen(file_buf) + 2;
+
+		char content_buf[256 + n_bytes];
+		int body_len = strlen(certs_handler->recipients[i]) + strlen(username) 
+			+ strlen(file_buf) + 2;
 		sprintf(content_buf,
 				"POST /sendmsg HTTP/1.0\nContent-Length: %d\n\n%s\n%s\n%s",
 				body_len, username, certs_handler->recipients[i], file_buf);
 
 		SSL_write(ssl, content_buf, strlen(content_buf));
+
+		// --------- Get server response to request to sendmsg ---------- //
+		char response_buf[4096];
+		err = SSL_read(ssl, response_buf, sizeof(response_buf) - 1);
+		response_buf[err] = '\0';
+
+		if (strstr(response_buf, "200 Success")) {
+			fprintf(stdout, "Your message was successfully mailed "
+					"to %s.\n", certs_handler->recipients[i]);
+		} else {
+			printf("Sorry, an error occurred in sending your message "
+					"to %s.\n", certs_handler->recipients[i]);
+		}
+		remove_temporary_files_from_mailbox(username);
 	}
+
 	// ------- Clean Up -------- //
 	CLEANUP:
 	SSL_shutdown(ssl);
@@ -371,15 +388,13 @@ int encrypt_message(char *msg_path, char *rcpt_cert_path, char *encrypted_msg_pa
 	ERR_load_crypto_strings();
 
 	/* Read in recipient certificate */
-	tbio = BIO_new_file(rcpt_cert_path, "rb+");
-	if (!tbio) {
+	if (!(BIO_new_file(rcpt_cert_path, "rb+"))) {
 		fprintf(stderr, "Could not open recipient certificate at %s\n",
 				rcpt_cert_path);
 		goto err;
 	}
 
-	rcert = PEM_read_bio_X509(tbio, NULL, 0, NULL);
-	if (!rcert) {
+	if (!(rcert = PEM_read_bio_X509(tbio, NULL, 0, NULL))) {
 		fprintf(stderr, "Could not read recipient X509 from TBIO\n");
 		goto err;
 	}
@@ -398,21 +413,18 @@ int encrypt_message(char *msg_path, char *rcpt_cert_path, char *encrypted_msg_pa
 	rcert = NULL;
 
 	/* Open content being encrypted */
-	in = BIO_new_file(msg_path, "r");
-	if (!in) {
+	if (!(in = BIO_new_file(msg_path, "r"))) {
 		fprintf(stderr, "Could not open message content to be encrypted.\n");
 		goto err;
 	}
 
 	/* encrypt content */
-	cms = CMS_encrypt(recips, in, EVP_des_ede3_cbc(), flags);
-	if (!cms) {
+	if (!(cms = CMS_encrypt(recips, in, EVP_des_ede3_cbc(), flags))) {
 		fprintf(stderr, "Could not encrypt content to CMS\n");
 		goto err;
 	}
 
-	out = BIO_new_file(encrypted_msg_path, "w");
-	if (!out) {
+	if (!(out = BIO_new_file(encrypted_msg_path, "w"))) {
 		fprintf(stderr, "Could not open new encrypted message file\n");
 		goto err;
 	}
@@ -454,65 +466,37 @@ void print_usage_information() {
  * Adapted from: https://stackoverflow.com/questions/38714363/read-html-response-using-ssl-read-in-c-http-1-0
  */
 char* receive_ssl_response(SSL *ssl) {
-	int header_size = 1000;
-	char *header = (char*) malloc(header_size * sizeof(char));
-	if (header == NULL) {
-		return NULL;
-	}
 	int body_size = 10000;
 	char *body = (char*) malloc(body_size * sizeof(char));
 	if (body == NULL) {
 		return NULL;
 	}
-	int bytes;
-	int received = 0;
-	int i, line_length;
-	char c[1];
-
-	memset(header, '\0', header_size);
 	memset(body, '\0', body_size);
 
-	i = 0;
-	line_length = 0;
-	do {
-		bytes = SSL_read(ssl, c, 1);
-		if (bytes <= 0)
-			break;
-		if (c[0] == '\n') {
-			if (line_length == 0)
-				break;
-			else
-				line_length = 0;
-		} else
-			line_length++;
-		if (i < header_size)
-			header[i++] = c[0];
-		received += bytes;
-	} while (1);
-	if (!strstr(header, "200 Success")) {
+	char buf[4096];
+	int err = SSL_read(ssl, buf, sizeof(buf) - 1);
+	buf[err] = '\0';
+	if (!strstr(buf, "200 Success")) {
 		return NULL;
 	}
-	free(header);
 
-	char *buf = malloc(1024 * sizeof(char));
-	received = 0;
+	int received = 1;
 	do {
-		memset(buf, '\0', 1024 * sizeof(char));
-		bytes = SSL_read(ssl, buf, 1024);
-		if (bytes <= 0)
+		memset(buf, '\0', sizeof(buf));
+		err = SSL_read(ssl, buf, sizeof(buf) - 1);
+		if (err <= 0)
 			break;
-		if (body_size <= bytes + received) {
-			body = realloc(body, 2 * body_size);
-			body_size *= 2;
+		if (body_size <= received + err) {
+			body = realloc(body, 2 * (received + err));
+			body_size = 2 * (received + err);
 			if (!body) {
 				free(body);
 				return NULL;
 			}
 		}
 		strcat(body, buf);
-		received += bytes;
+		received += err;
 	} while (1);
-	free(buf);
 	return body;
 }
 

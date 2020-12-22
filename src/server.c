@@ -10,6 +10,8 @@
 #include <openssl/rand.h>
 #include <ctype.h>
 #include <dirent.h>
+#include <sys/time.h>
+
 #include <crypt.h>  // needs to be included if using linux machine
 
 #include "user_io.h"
@@ -32,6 +34,7 @@ const char *unauthorized_resp = "HTTP/1.0 401 Unauthorized\nContent-Length: 0\n\
 const char *conflict_resp = "HTTP/1.0 409 Conflict\nContent-Length: %d\n\n";
 const char *internal_error_resp = "HTTP/1.0 500 Internal Server Error\nContent-Length: 0\n\n";
 const char *success_template = "HTTP/1.0 200 Success\nContent-Length: %d\n\n";
+const char *success_template_with_content = "HTTP/1.0 200 Success\nContent-Length: %d\n\n%s";
 
 int tcp_listen(int port);
 RequestHandler* init_request_handler();
@@ -47,7 +50,7 @@ int write_x509_cert_to_file(X509 *cert, char *path);
 int read_x509_cert_from_file(char *cert_buf, int size, char *path);
 int rand_serial(ASN1_INTEGER *ai);
 int write_new_password(char *pass, char *path);
-int awaiting_messages_for_client(char *path);
+int awaiting_messages_for_client(char *path, char *pending_file_buf, int save_pending_file);
 
 int main(int argc, char **argv) {
 	int err;
@@ -182,7 +185,7 @@ int main(int argc, char **argv) {
 			//--- If there are unread messages for client, don't let them change their certificate --- //
 			char path[100];
 			snprintf(path, sizeof(path), "mailboxes/%s", uname_buf);
-			if ((err = awaiting_messages_for_client(path)) != 0) {
+			if ((err = awaiting_messages_for_client(path, NULL, 0)) != 0) {
 				if (err < 0) {
 					fprintf(stderr, "Error occurred trying to determine unread messages.\n");
 					err = SSL_write(ssl, internal_error_resp, strlen(internal_error_resp));
@@ -256,51 +259,261 @@ int main(int argc, char **argv) {
 		}
 
 		else if (request_handler->command == UserCerts) {
+			// --- Get list of recipients from space-separated request body ---//
+			char** certs_recpts = (char**) malloc(100 * sizeof(char*));
+			char** current = certs_recpts;
+	
+			char* recipient = strtok(request_handler->request_content, " ");
+			int no_recpts = 0;
 
-			// handle request to send back certificates for a set of users
-
-//			size_t msg_size = 10000
-//			char *certs_body = (char*) malloc(msg_size * sizeof(char));
-//			memset(certs_body, '\0', sizeof(certs_body));
-//			char *recipient;
-//			do {
-//				recipient = strtok(str, " ");
-//				if (recipient == NULL)
-//					break;
-//
-//			} while (1);
-		}
-		else if (request_handler->command == SendMsg_Get) {
-			//get name of recipient
-			char *startreq = request_handler->request_content;
-			char *enduname = strchr(startreq, '\n');
-			memcpy(uname_buf, startreq, enduname-startreq);
-			uname_buf[enduname-startreq] = 0;
+			while (recipient != NULL) {
+				if (no_recpts > 100) {
+					// too many recipients
+					for (int l = 0; l < no_recpts; l++) {
+						free(certs_recpts[l]);
+					}
+					free(certs_recpts);
+					err = SSL_write(ssl, bad_request_resp, strlen(bad_request_resp));
+					goto CLEANUP;
+				}
+				*current = malloc((strlen(recipient) + 1) * sizeof(char));
+				strcpy(*current, recipient);
+				current++;
+				no_recpts++;
+				recipient = strtok(NULL, " ");
+			}
 			
-			memset(buf, 0, sizeof(buf));
+			if (no_recpts == 0) {
+				// no recipients
+				free(certs_recpts);
+				err = SSL_write(ssl, bad_request_resp, strlen(bad_request_resp));
+				goto CLEANUP;
+			}
+
+			// --- Construct response body for UserCerts ---//
+			int max_size = 100000;
+			char* response_body = (char*) malloc(sizeof(char) * max_size);
+			memset(response_body, '\0', max_size);
+			snprintf(response_body, max_size, "%d\n", no_recpts);
+			int response_size = strlen(response_body) + 1;
+
+			char* cert_separator = "\n\nENDCERT\n\n";
+			int cert_separator_len = strlen(cert_separator);
+			char path_buf[100];
+			FILE* cert_fp;
+			int file_size;
+			int new_size;
+			char* cert_data;
+			for (int i = 0; i < no_recpts; i++) {
+				memset(path_buf, '\0', sizeof(path_buf));
+				snprintf(path_buf, sizeof(path_buf), "mailboxes/%s/%s.cert.pem", certs_recpts[i], certs_recpts[i]);
+				cert_fp = fopen(path_buf, "r");
+				if (cert_fp == NULL) {
+					continue;
+				}
+				fseek(f, 0, SEEK_END);
+				file_size = ftell(f); 
+				fseek(f, 0, SEEK_SET); 
+    			
+				cert_data = (char*) malloc(sizeof(char) * (file_size + 1));
+		    	fread(cert_data, sizeof(char), file_size, cert_fp);
+				cert_data[file_size] = '\0';
+				
+				new_size = response_size + strlen(certs_recpts[i]) + file_size + cert_separator_len + 1;
+				if (max_size <= new_size) {
+					response_body = realloc(response_body, 2 * new_size);
+					max_size = 2 * new_size;
+					if (!response_body) {
+						free(response_body);
+						fprintf(stderr, "realloc failed");
+						exit(1);
+					}
+				}
+				strcat(response_body, certs_recpts[i]);
+				strcat(response_body, "\n");
+				strcat(response_body, cert_data);
+				strcat(response_body, cert_separator);
+				response_size = new_size;
+				free(certs_recpts[i]);
+				free(cert_data);
+				fclose(cert_fp);
+			}
+			free(certs_recpts);
+			char content_buf[4096];
+			snprintf(content_buf, success_template, response_size);
+			err = SSL_write(ssl, content_buf, strlen(content_buf));
+			err = SSL_write(ssl, response_body, response_size);
+			free(response_body);
+
+			// --- Receive SendMsg Commands ---//
+			RequestHandler* sendmsg_handler;
+			while (1) {
+				char buf[4096];
+				int body_size = 10000;
+
+				char *body = (char*) malloc(body_size * sizeof(char));
+				if (body == NULL) {
+					return NULL;
+				}
+				memset(body, '\0', body_size);
+
+				int received = 1;
+				int err;
+				do {
+					memset(buf, '\0', sizeof(buf));
+					err = SSL_read(ssl, buf, sizeof(buf) - 1);
+					if (err <= 0) break;
+					if (body_size <= received + err) {
+						body = realloc(body, 2 * (received + err));
+						if (!body) {
+							free(body);
+							return NULL;
+						}
+						body_size = 2 * (received + err);
+					}
+					strcat(body, buf);
+					received += err;
+				} while (1);
+				
+				fprintf(stdout, "Received %d chars of content:\n---\n%s----\n", err, body);
+				sendmsg_handler = handle_recvd_msg(body);
+				if (!sendmsg_handler || sendmsg_handler->command != SendMsg) {
+					free_request_handler(sendmsg_handler);
+					err = SSL_write(ssl, bad_request_resp, strlen(bad_request_resp));
+					goto CLEANUP;
+				}
+				if (strlen(sendmsg_handler->request_content) == 0) {
+					break;
+				}
+				if (0 == save_client_msg(sendmsg_handler->request_content)) {
+					snprintf(content_buf, success_template, 0);
+					err = SSL_write(ssl, content_buf, strlen(content_buf));
+				} else {
+					// write error case
+				}
+				free_request_handler(sendmsg_handler);
+			}
+		}
+		else if (request_handler->command == SendMsg) {
+			// SendMsg should not be called directly
+			err = SSL_write(ssl, bad_request_resp, strlen(bad_request_resp));
+			goto CLEANUP;
+    }
+// 		else if (request_handler->command == SendMsg_Get) {
+// 			//get name of recipient
+// 			char *startreq = request_handler->request_content;
+// 			char *enduname = strchr(startreq, '\n');
+// 			memcpy(uname_buf, startreq, enduname-startreq);
+// 			uname_buf[enduname-startreq] = 0;
+			
+// 			memset(buf, 0, sizeof(buf));
 
 
+// 			char read_certbuf[4096];
+// 			char tmp_buf[100];
+// 			int read_len = 0;
+// 			snprintf(tmp_buf, sizeof(tmp_buf), "mailboxes/%s/%s.cert.pem", uname_buf, uname_buf);
+
+// 			if ((read_len = read_x509_cert_from_file(read_certbuf,
+// 					sizeof(read_certbuf), tmp_buf)) == 0) {
+
+// 				err = SSL_write(ssl, internal_error_resp, strlen(internal_error_resp));
+// 				goto CLEANUP;
+// 			}
+
+// 			char content_buf[4096];
+// 			sprintf(content_buf, success_template, read_len);
+
+// 			err = SSL_write(ssl, content_buf, strlen(content_buf));
+// 			err = SSL_write(ssl, read_certbuf, read_len);
+// 		}
+		else if (request_handler->command == RecvMsg) {
+
+			// client making request is only content in request body; if request
+			// body is too long, this doesn't make sense; usernames are always < 20 chars
+			char *requesting_client = request_handler->request_content;
+			if (strlen(requesting_client) > 20) {
+				err = SSL_write(ssl, bad_request_resp, strlen(bad_request_resp));
+				goto CLEANUP;
+			}
+			
+			char file_path_buf[257] // max size of a filepath, plus null terminator
+			snprintf(file_path_buf, sizeof(file_path_buf), "mailboxes/%s", requesting_client);
+			char filename_buf[100]; 
+			memset(filename_buf, 0, sizeof(filename_buf));
+
+			// find it there are any awaiting messages for the client
+			int awaiting_messages = awaiting_messages_for_client(file_path_buf, filename_buf, 1);
+			if (awaiting_messages < 0) {
+
+				// this is an error case; likely the username provided was wrong in the request body
+				err = SSL_write(ssl, not_found_resp, strlen(not_found_resp));
+				goto CLEANUP;
+			} 
+			else if (!awaiting_messages) {
+				// if there are no awaiting messages for the client, this is OK, send back no content
+				char no_msg_buf[100];
+				sprintf(no_msg_buf, success_template, 0);
+				SSL_write(ssl, no_msg_buf, strlen(no_msg_buf));
+				goto CLEANUP;
+			}
+			// ------ Open a file and parse the contents to retrieve information ----- //
+
+			memset(file_path_buf, 0, sizeof(file_path_buf));
+			sprintf(file_path_buf, "mailboxes/%s/%s", requesting_client, filename_buf);
+			FILE *fp = fopen(file_path_buf);
+			if (!fp) {
+				err = SSL_write(ssl, internal_error_resp, strlen(internal_error_resp));
+				goto CLEANUP;
+			}
+			
+			// read in entire file
+			long file_size = 0;
+			fseek(fp, 0, SEEK_END);
+			file_size = ftell(fp); 
+			fseek(fp, 0, SEEK_SET); 
+			char file_contents[file_size];
+			fread(file_contents, 1, file_size, fp);
+			fclose(fp);
+			
+			// first line of the file will be a new sender
+			char sender[20];
+			int i = 0;
+			while (i < file_size && i < sizeof(sender) && file_contents[i] != '\n') {
+				sender[i] = file_contents[i]
+				i++;
+			}
+			sender[i] = '\0';
+		
+			if (file_contents[i] != '\n' || i + 1 >= filesize) {
+				// this is probably a problem
+				err = SSL_write(ssl, internal_error_resp, strlen(internal_error_resp));
+				goto CLEANUP;
+			}
+
+			// Get the start of the message content
+			char *beginning_of_msg_content = &file_contents[++i];
+			
+		  // -------- Read in the sender's certificate ------ //
+			memset(file_path_buf, 0, sizeof(file_path_buf));
 			char read_certbuf[4096];
-			char tmp_buf[100];
 			int read_len = 0;
-			snprintf(tmp_buf, sizeof(tmp_buf), "mailboxes/%s/%s.cert.pem", uname_buf, uname_buf);
+			snprintf(file_path_buf, sizeof(file_path_buf), "mailboxes/%s/%s.cert.pem", sender, sender);
 
 			if ((read_len = read_x509_cert_from_file(read_certbuf,
-					sizeof(read_certbuf), tmp_buf)) == 0) {
+					sizeof(read_certbuf), file_path_buf)) == 0) {
 
 				err = SSL_write(ssl, internal_error_resp, strlen(internal_error_resp));
 				goto CLEANUP;
 			}
 
-			char content_buf[4096];
-			sprintf(content_buf, success_template, read_len);
-
-			err = SSL_write(ssl, content_buf, strlen(content_buf));
-			err = SSL_write(ssl, read_certbuf, read_len);
-		}
-		else if (request_handler->command == SendMsg_Post) {
-		}
-		else if (request_handler->command == RecvMsg) {
+      // ---- Provide the sender's cert, the message content back to client ---- //
+			char success_buf[256];
+			int content_len = strlen(sender) + read_len + file_size - i;
+			sprintf(success_buf, success_template_with_content, content_len, sender);
+			SSL_write(ssl, success_buf, strlen(success_buf));
+			SSL_write(ssl, beginning_of_msg_content, file_size - i);
+			SSL_write(ssl, read_certbuf, read_len);
 		}
 
 		CLEANUP: 
@@ -352,9 +565,11 @@ int write_new_password(char *pass, char *path) {
 }
 
 /**
- * Count the number of messages awaiting for client.
+ * Count the number of messages awaiting for client. If an awaiting
+ * message exists, copy the name of the file into the char array named
+ * pending_file.
  */
-int awaiting_messages_for_client(char *path) {
+int awaiting_messages_for_client(char *path, char *pending_file_buf, int save_pending_file) {
 	int message_count = 0;
 	DIR *dir;
 	struct dirent *de;
@@ -366,8 +581,8 @@ int awaiting_messages_for_client(char *path) {
 	char *known_csr_ext = ".csr.pem";
 
 	if (!(dir = opendir(path))) {
-		fprintf(stderr, "Could not open directory of mailboxes "
-				"to check for unread messages.\n");
+		fprintf(stderr, "Could not open the following directory "
+				"to check for unread messages: %s.\n", path);
 		return -1;
 	}
 
@@ -387,6 +602,11 @@ int awaiting_messages_for_client(char *path) {
 				&& strcmp(known_cert_ext, &filename[len - strlen(known_cert_ext)]) == 0) {
 			continue;
 		} else {
+			if (save_pending_file && !strlen(pending_file_buf)) {\
+				// save the first pending file to the pending_file_buf
+				memcpy(pending_file_buf, filename, strlen(filename));
+				pending_file_buf[strlen(filename)] = '\0';
+			}
 			message_count++;
 		}
 	}
@@ -641,10 +861,12 @@ RequestHandler* handle_recvd_msg(char *buf) {
 
 	char *getcert = "POST /getcert HTTP/1.0";
 	char *changepw = "POST /changepw HTTP/1.0";
-	char *sendmsg_get = "GET /sendmsg HTTP/1.0";
-	char *sendmsg_post = "POST /sendmsg HTTP/1.0";
-	char *recvmsg = "POST /recvmsg HTTP/1.0";
-	char *usercerts = "GET /certificates HTTP/1.0";
+  char *sendmsg = "POST /sendmsg HTTP/1.0";
+  char *usercerts = "GET /certificates HTTP/1.0";
+  char *recvmsg = "GET /message HTTP/1.0";
+
+	// char *sendmsg_get = "GET /sendmsg HTTP/1.0";
+	// char *sendmsg_post = "POST /sendmsg HTTP/1.0";
 
 	RequestHandler *request_handler = init_request_handler();
 	if (!request_handler) {
@@ -850,4 +1072,51 @@ void free_request_handler(RequestHandler *request_handler) {
 		free(request_handler->response_content);
 	}
 	free(request_handler);
+}
+
+/**
+ * Saves message from client in SendMsg request.
+ */
+int save_client_msg(char* request_body) {
+	// first line is the sender
+	char* line = strtok(request_body, "\n");
+	char* sender = malloc(strlen(line) + 1);
+	strcpy(sender, line);
+
+	// second line is the recipient
+	line = strtok(NULL, "\n");
+	char* recipient = malloc(strlen(line) + 1);
+	strcpy(recipient, line);
+		
+	char path[200];
+	snprintf(path, sizeof(path), "mailboxes/%s/%ld", recipient, get_current_time());
+	FILE* fp = fopen(path, "w");
+	if (!fp) {
+		free(sender);
+		free(recipient);
+		fprintf(stderr, "Could not open file path for recipient %s", recipient);
+		return -1;
+	}
+
+	fwrite(fp, 1, strlen(sender), sender);
+	fwrite(fp, 1, 1, "\n");
+	// write rest of the encrypted message
+	line = strtok(NULL, "");
+	fwrite(fp, 1, strlen(line), line);
+	fclose(fp);
+	fprintf(stdout, "Saved encrypted message to path %s", path);
+	free(recipient);
+	free(sender);
+	return 0;
+}
+
+/**
+ * Get current time in milliseconds. Credit: https://stackoverflow.com/questions/10098441/get-the-current-time-in-milliseconds-in-c
+ */
+int64_t get_current_time() {
+  struct timeval time;
+  gettimeofday(&time, NULL);
+  int64_t s1 = (int64_t)(time.tv_sec) * 1000;
+  int64_t s2 = (time.tv_usec / 1000);
+  return s1 + s2;
 }
