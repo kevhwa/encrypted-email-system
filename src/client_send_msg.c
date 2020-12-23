@@ -163,12 +163,10 @@ int main(int argc, char **argv) {
 	}
 
 	// -------- Provide content to server -------- //
+
 	char obuf[4096];
 	sprintf(obuf, "GET /certificates HTTP/1.0\nContent-Length: %lu\n\n%s",
 			strlen(rcpts), rcpts);
-
-	printf("This is the buffer sent to the server:\n%s\n", obuf);
-	printf("These are the recipients: %s\n", rcpts);
 
 	SSL_write(ssl, obuf, strlen(obuf));
 
@@ -187,7 +185,6 @@ int main(int argc, char **argv) {
 		goto CLEANUP;
 	}
 
-	printf("Received recipient certificates!\n");
 	certs_handler = parse_certificates(request_handler->request_content);
 	if (!certs_handler) {
 		printf("Could not parse certificates in response message received from server.\n");
@@ -195,7 +192,6 @@ int main(int argc, char **argv) {
 		goto CLEANUP;
 	} 
 
-	printf("Successfully parsed certificates!\n");
 	if (certs_handler->num == 0) {
 		printf("No valid recipients found.\n");
 	}
@@ -219,9 +215,7 @@ int main(int argc, char **argv) {
 		}
 	}
 	// ------ Encrypt messages and send them to the server----- //
-
-	printf("Encrypting messages to send to server...\n");
-
+	
 	for (int i = 0; i < certs_handler->num; i++) {
 		if (certs_handler->certificates[i] == NULL) {
 			printf("Did not receive certificate for recipient, so cannot send encrypted "

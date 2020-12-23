@@ -4,7 +4,7 @@ dir="$1"
 
 [ $# -eq 0 ] && { echo "Usage: $0 dir-name"; exit 1; }
 
-echo -e "******** Starting acceptance tests for getcert and changepw executables ********\n";
+echo -e "\n******** Starting acceptance tests for getcert and changepw executables ********";
 
 # Move into client directory
 
@@ -18,7 +18,7 @@ echo -e "\n***2. Making a request for a certificate with correct password... Thi
 
 ./bin/getcert -u $USER -p testuser
 
-echo -e "\n***3. Making a request to getcert when user already has a certificate... This should ask user to use changepw***\n"
+echo -e "\n***3. Making a request to getcert when user already has a certificate... This should ask user to use changepw.***\n"
 
 ./bin/getcert -u $USER -p testuser
 
@@ -60,4 +60,4 @@ echo -e "\nClean Up: Resetting user's credentials to their original content...\n
 sudo rm -f ../server-dir/mailboxes/$USER/1010101
 echo "testuser" | ./bin/changepw -u $USER -p tester
 
-echo -e "***********************************************************\n";
+echo -e "******************************************************************\n";
