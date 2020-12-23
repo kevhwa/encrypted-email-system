@@ -176,7 +176,7 @@ int main(int argc, char **argv) {
 	CertificatesHandler *certs_handler = NULL;
 
 	request_handler = parse_ssl_response(ssl);
-	fprintf("request handler body: %s\n", request_handler->request_content);
+	fprintf(stdout, "request handler body: %s\n", request_handler->request_content);
 
 	if (!request_handler) {
 		fprintf(stdout, "Could not obtain certificates from server for "
