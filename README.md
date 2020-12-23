@@ -116,6 +116,6 @@ $ ./bin/start_server.sh tree  # tree is the name of the message system
 In a new terminal window, then you can then run tests via the following commands, issued from the project root. Please run them in order:
 ```
 $ ./tests/test_certificate_creation.sh tree # tests getcert and changepw 
-$ ./tests/test_recvmsg.sh tree	
 $ ./tests/test_sendmsg.sh tree
+$ ./tests/test_recvmsg.sh tree	
 ```
