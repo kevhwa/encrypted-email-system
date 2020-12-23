@@ -376,6 +376,8 @@ int main(int argc, char **argv) {
 				fprintf(stdout, "Failed to send response header for GET /certificates\n");
 				goto CLEANUP;
 			}
+
+			fprintf("Response body to client with certificates: %s", response_body);
 			err = SSL_write(ssl, response_body, response_size);
 			if (err <= 0) {
 				fprintf(stdout, "Failed to send response body for GET /certificates\n");
