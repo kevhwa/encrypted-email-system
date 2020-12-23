@@ -18,6 +18,8 @@ mkdir -p $J/{bin,lib64,lib}
 mkdir -p $J/lib64/x86_64-linux-gnu
 mkdir -p $J/lib/x86_64-linux-gnu
 
+cp ./bin/start_sandboxed_server.sh $J
+
 cp /bin/{bash,ls} $J/bin
 
 list="$(ldd /bin/bash | egrep -o '/lib/.*\.[0-9]')"

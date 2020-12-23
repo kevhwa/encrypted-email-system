@@ -35,7 +35,7 @@ The server needs to be run as two instances: one running on port 8080 that accep
 
 If you installed the system using `make install-with-security`, the sandboxing setup should have brought you into the server directory, `server-dir`. The easiest way to start the server(s) from there is simply by running:
 ```
-$ (trap 'kill 0' SIGINT; ./bin/server & ./bin/server -a)
+$ ./start_sandboxed_server.sh
 ```
 
 If you installed the system with `make install-basic` then you can run the following command, where `tree` is the name of the messaging system tree you used:
