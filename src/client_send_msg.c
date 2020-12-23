@@ -176,6 +176,8 @@ int main(int argc, char **argv) {
 	CertificatesHandler *certs_handler = NULL;
 
 	request_handler = parse_ssl_response(ssl);
+	fprintf("request handler body: %s\n", request_handler->request_content);
+
 	if (!request_handler) {
 		fprintf(stdout, "Could not obtain certificates from server for "
 			"your recipients. Try again later.\n");
@@ -513,9 +515,11 @@ CertificatesHandler* parse_certificates(char *body) {
 	}
 	certificates_handler->num = 0;
 
+	fprintf(stdout, "Body to Parse: %s\n", body);
+
 	// get first line of message
 	char *line = strtok(body, "\n");
-	if (line == NULL) {
+	if (!line) {
 		return NULL;
 	}
 	int num_certs = atoi(line);
@@ -528,14 +532,14 @@ CertificatesHandler* parse_certificates(char *body) {
 	certificates_handler->certificates = (char**) malloc((num_certs) * sizeof(char*));
 	certificates_handler->recipients = (char**) malloc((num_certs) * sizeof(char*));
 
-	fprintf(stdout, "Body to Parse: %s\n", body);
+	fprintf(stdout, "Num certs: %d\n", num_certs);
 
 	int j = 0;
 	while (j < num_certs) {
 
 		// next line should be the recipient name
 		line = strtok(NULL, "\n");
-		if (line == NULL) {
+		if (!line) {
 			fprintf(stderr, "Could not return recipient for certificate #%d\n", j);
 			free_certificates_handler(certificates_handler);
 			return NULL;
