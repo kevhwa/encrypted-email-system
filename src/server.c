@@ -211,8 +211,7 @@ int main(int argc, char **argv) {
 			// ------------ Save CSR to a CSR file   ----- //
 			memset(path, 0, sizeof(path));
 			X509_REQ *x509_req;
-			snprintf(path, sizeof(path), "mailboxes/%s/%s.csr.pem",
-					uname_buf, uname_buf);
+			snprintf(path, sizeof(path), "mailboxes/%s/%s.csr.pem", uname_buf, uname_buf);
 
 			if (!write_x509_req_to_file(cert_buf, path)) {
 				printf("failed to write csr to file");
@@ -333,8 +332,6 @@ int main(int argc, char **argv) {
 				memset(path_buf, '\0', sizeof(path_buf));
 				snprintf(path_buf, sizeof(path_buf), "mailboxes/%s/%s.cert.pem", certs_recpts[i], certs_recpts[i]);
 
-				fprintf(stdout, "Looking for certificate of recipient '%s' here: %s\n", certs_recpts[i], path_buf);
-
 				cert_fp = fopen(path_buf, "r");
 				if (!cert_fp) {
 					fprintf(stdout, "Could not find certificate for recipient '%s'\n", certs_recpts[i]);
@@ -384,9 +381,6 @@ int main(int argc, char **argv) {
 				fprintf(stdout, "Failed to send response body for GET /certificates\n");
 				goto CLEANUP;
 			}
-
-			fprintf(stdout, "Sent certificates:\n---\n%s%s\n---\n", content_buf, response_body);
-			fflush(stdout);
 			free(response_body);
 
 			// --- Receive SendMsg Commands ---//
@@ -982,11 +976,11 @@ int save_client_msg(char* request_body) {
 
 	fwrite(sender, 1, strlen(sender), fp);
 	fwrite("\n", 1, 1, fp);
+
 	// write rest of the encrypted message
 	line = strtok(NULL, "");
 	fwrite(line, 1, strlen(line), fp);
 	fclose(fp);
-	fprintf(stdout, "Saved encrypted message to file %s\n", path);
 	free(recipient);
 	free(sender);
 	return 0;
