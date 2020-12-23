@@ -176,7 +176,7 @@ int main(int argc, char **argv) {
 	CertificatesHandler *certs_handler = NULL;
 
 	request_handler = parse_ssl_response(ssl);
-	fprintf(stdout, "request handler body: %s\n", request_handler->request_content);
+	fprintf(stdout, "request handler body:\n%s\n", request_handler->request_content);
 
 	if (!request_handler) {
 		fprintf(stdout, "Could not obtain certificates from server for "
@@ -514,9 +514,7 @@ CertificatesHandler* parse_certificates(char *body) {
 		return NULL;
 	}
 	certificates_handler->num = 0;
-
-	fprintf(stdout, "Body to Parse: %s\n", body);
-
+	
 	// get first line of message
 	char *line = strtok(body, "\n");
 	if (!line) {
@@ -531,8 +529,6 @@ CertificatesHandler* parse_certificates(char *body) {
 	certificates_handler->num = num_certs;
 	certificates_handler->certificates = (char**) malloc((num_certs) * sizeof(char*));
 	certificates_handler->recipients = (char**) malloc((num_certs) * sizeof(char*));
-
-	fprintf(stdout, "Num certs: %d\n", num_certs);
 
 	int j = 0;
 	while (j < num_certs) {
@@ -568,6 +564,7 @@ CertificatesHandler* parse_certificates(char *body) {
 					certificates_handler->recipients[j]);
 			certificates_handler->certificates[j] = NULL;
 			line = strtok(NULL, "\n");
+			j++;
 			continue;
 
 		} else {
@@ -605,7 +602,7 @@ CertificatesHandler* parse_certificates(char *body) {
 
 	// there should be a trailing \n and that's it
 	line = strtok(NULL, "");
-	if (strlen(line) == 0 || !(strlen(line) == 1 && line[0] == '\n')) {
+	if (line && (strlen(line) == 0 || !(strlen(line) == 1 && line[0] == '\n'))) { {
 		fprintf(stderr, "The certificates has unexpected leftover content of len (%lu):\n'%s'\n", strlen(line), line);
 		free_certificates_handler(certificates_handler);
 		return NULL;
