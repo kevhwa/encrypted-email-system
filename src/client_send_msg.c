@@ -175,7 +175,6 @@ int main(int argc, char **argv) {
 	CertificatesHandler *certs_handler = NULL;
 
 	request_handler = parse_ssl_response(ssl);
-	
 	if (!request_handler) {
 		fprintf(stdout, "Did not receive valid response from GET /certificates");
 		goto CLEANUP;
