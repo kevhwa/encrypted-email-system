@@ -177,23 +177,25 @@ int main(int argc, char **argv) {
 
 	request_handler = parse_ssl_response(ssl);
 	if (!request_handler) {
-		fprintf(stdout, "Did not receive valid response from GET /certificates");
+		fprintf(stdout, "Could not obtain certificates from server for "
+			"your recipients. Try again later.\n");
 		goto CLEANUP;
 	} else if (request_handler->command != SuccessResponse) {
-		fprintf(stdout, "Did not receive successful response from GET /certificates");
-		free_request_handler(request_handler);
+		fprintf(stderr, "Could not find certificates for your list of recipients. "
+			"Please ensure the recipients exist and that they have generated "
+			"certificates with 'getcert'.\n");
 		goto CLEANUP;
 	}
 
 	certs_handler = parse_certificates(request_handler->request_content);
 	if (!certs_handler) {
 		printf("Could not parse certificates in response message received from server.\n");
-		free_request_handler(request_handler);
 		goto CLEANUP;
 	} 
 
 	if (certs_handler->num == 0) {
-		printf("No valid recipients found.\n");
+		fprintf(stderr, "No valid recipients found.\n");
+		goto CLEANUP;
 	}
 	else {
 		FILE *tmpfile;
@@ -204,7 +206,6 @@ int main(int argc, char **argv) {
 			if (certs_handler->certificates[i] == NULL)
 				continue;
 				
-			printf("Attempting to write certificate to file...\n");
 			snprintf(path_buf, sizeof(path_buf), RECIPIENT_CERT_TEMPLATE,
 					username, certs_handler->recipients[i]);
 
@@ -215,7 +216,7 @@ int main(int argc, char **argv) {
 		}
 	}
 	// ------ Encrypt messages and send them to the server----- //
-	
+
 	for (int i = 0; i < certs_handler->num; i++) {
 		if (certs_handler->certificates[i] == NULL) {
 			printf("Did not receive certificate for recipient, so cannot send encrypted "
@@ -259,13 +260,7 @@ int main(int argc, char **argv) {
 		file_buf[content] = '\0';
 		fclose(fp);
 
-		// send the content to server... content formatted as:
-		//
-		// POST /sendmsg HTTP/1.0
-		// Content-Length: X
-		//
-		// sender 
-		// recipient
+		// send the content to server
 		char header_buf[256];
 		char content_buf[256 + n_bytes];
 		int body_len = strlen(certs_handler->recipients[i]) + strlen(username) 
@@ -297,8 +292,9 @@ int main(int argc, char **argv) {
 	SSL_write(ssl, end_buf, strlen(end_buf) + 1);
 
 	// ------- Clean Up -------- //
-	CLEANUP:
+CLEANUP:
 	remove_temporary_files_from_mailbox(username);
+	free_request_handler(request_handler);
 	free_certificates_handler(certs_handler);
 	SSL_shutdown(ssl);
 	SSL_free(ssl);
@@ -612,12 +608,16 @@ CertificatesHandler* parse_certificates(char *body) {
 }
 
 void free_certificates_handler(CertificatesHandler *certificates_handler) {
-	if (certificates_handler == NULL) {
+	if (!certificates_handler) {
 		return;
 	}
 	for (int j = 0; j < certificates_handler->num; j++) {
-		free(certificates_handler->certificates[j]);
-		free(certificates_handler->recipients[j]);
+		if (certificates_handler->certificates[j]) {
+			free(certificates_handler->certificates[j]);
+		}
+		if (certificates_handler->recipients[j]) {
+			free(certificates_handler->recipients[j]);
+		}
 	}
 	free(certificates_handler->certificates);
 	free(certificates_handler->recipients);
