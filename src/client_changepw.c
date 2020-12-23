@@ -24,6 +24,7 @@
 #define CSR_FILE "mailboxes/%s/cert_req.pem"
 #define CERTIFICATE_FILE "mailboxes/%s/%s.cert.pem"
 
+int user_has_existing_cert(char *username);
 int tcp_connection(char *host_name, int port);
 void print_usage_information();
 EVP_PKEY *generate_key(char *username, char *key_path);
