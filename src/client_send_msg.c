@@ -528,13 +528,15 @@ CertificatesHandler* parse_certificates(char *body) {
 	certificates_handler->certificates = (char**) malloc((num_certs) * sizeof(char*));
 	certificates_handler->recipients = (char**) malloc((num_certs) * sizeof(char*));
 
+	fprintf(stdout, "Body to Parse: %s\n", body);
+
 	int j = 0;
 	while (j < num_certs) {
 
 		// next line should be the recipient name
 		line = strtok(NULL, "\n");
 		if (line == NULL) {
-			fprintf(stderr, "Could not return recipient for certificate %d", j);
+			fprintf(stderr, "Could not return recipient for certificate #%d\n", j);
 			free_certificates_handler(certificates_handler);
 			return NULL;
 		}
@@ -558,7 +560,7 @@ CertificatesHandler* parse_certificates(char *body) {
 			cert_len += (strlen(start_cert) + 1);
 
 		} else if (!strcmp(line, no_cert)) {
-			fprintf(stdout, "No certificate is available for %s recipient..\n",
+			fprintf(stdout, "No certificate is available for %s recipient at this time...\n",
 					certificates_handler->recipients[j]);
 			certificates_handler->certificates[j] = NULL;
 			line = strtok(NULL, "\n");

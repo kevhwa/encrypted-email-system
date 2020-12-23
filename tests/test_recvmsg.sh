@@ -31,4 +31,8 @@ echo -e "\n**** 3. Attempt to retrieve a message from mailbox when 0 messages ex
 
 ./bin/recvmsg
 
+echo -e "\n**** 4. Test unexpected command line arguments received... This should report correct usage***\n"
+
+./bin/recvmsg -some random -command -l ine arguments 
+
 echo -e "\n***********************************************************\n";

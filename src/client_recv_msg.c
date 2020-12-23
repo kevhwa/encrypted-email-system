@@ -43,6 +43,12 @@ int main(int argc, char **argv) {
 	SSL_CTX *ctx;
 	int sock;
 
+	if (argc > 1) {
+		fprintf(stderr, "Unexpected arguments received. No arguments are required "
+			"for this program.\nExample usage of this program:\n$ ./bin/recvmsg\n");
+		exit(1);
+	}
+
 	// figure out who the user is so that their certificate and key can be configured
 	char *username;
 	struct passwd *pass; 
