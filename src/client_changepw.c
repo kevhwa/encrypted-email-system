@@ -49,6 +49,14 @@ int main(int argc, char **argv) {
 		exit(1);
 	}
 
+	// check to see if there is already a cert for this user
+	if (!user_has_existing_cert(uname)) {
+		fprintf(stdout, "You do not have a certificate yet. You may use this "
+			"program to change your password and certificate only after you have "
+			"used the 'getcert' program to create an initial certificate.\n");
+		exit(1);
+	}
+
     // prompt user for a new password
 	char msg[100];
 	sprintf(msg, "Please provide a new password (less than %d characters): ", MAX_LENGTH);
@@ -204,6 +212,18 @@ CLEANUP:
 	close(sock);
 	return 0;
 }
+
+/**
+ * Check if a user already has a certificate.
+ * Returns 0 if false, 1 if true.
+ */
+int user_has_existing_cert(char *username) {
+	
+	char path_buf[64];
+	snprintf(path_buf, sizeof(path_buf), CERTIFICATE_FILE, username, username);
+  	return (access(path_buf, F_OK) == 0);  // F_OK tests for existence of file
+}
+
 
 /**
  * Wrties a X509 Certificate to file.
