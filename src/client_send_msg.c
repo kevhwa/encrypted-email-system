@@ -171,7 +171,11 @@ int main(int argc, char **argv) {
 	// --------- Get server response ---------- //
 
 	printf("Ready to receive server response...\n");
-	RequestHandler* request_handler = parse_ssl_response(ssl);
+	RequestHandler* request_handler = NULL;
+	CertificatesHandler *certs_handler = NULL;
+
+	request_handler = parse_ssl_response(ssl);
+	
 	if (!request_handler) {
 		fprintf(stdout, "Did not receive valid response from GET /certificates");
 		goto CLEANUP;
@@ -182,8 +186,8 @@ int main(int argc, char **argv) {
 	}
 
 	printf("Received recipient certificates!\n");
-	CertificatesHandler *certs_handler = parse_certificates(request_handler->request_content);
-	if (certs_handler == NULL) {
+	certs_handler = parse_certificates(request_handler->request_content);
+	if (!certs_handler) {
 		printf("Could not parse certificates in response message received from server.\n");
 		free_request_handler(request_handler);
 		goto CLEANUP;
