@@ -148,25 +148,23 @@ int main(int argc, char **argv) {
 
 	// --------- Get server response ---------- //
 	char response_buf[4096];
-
-	fprintf(stdout, "\nSERVER RESPONSE:\n");
 	err = SSL_read(ssl, response_buf, sizeof(response_buf) - 1);
 	response_buf[err] = '\0';
 
 	if (strstr(response_buf, "200 Success")) {
-		printf("Success!\n");
 
 		char cert_buf[4096];
 		err = SSL_read(ssl, cert_buf, sizeof(cert_buf) - 1);
 		cert_buf[err] = '\0';
 
-		printf("Certificate:\n%s\n", cert_buf);
 		char path_buf[100];
 		snprintf(path_buf, sizeof(path_buf), CLIENT_CERT_PATH_TEMPLATE, uname,
 				uname);
 		if (!write_x509_cert_to_file(cert_buf, path_buf)) {
 			printf("Could not save newly generated certificate to a local file.\n");
 		}
+		
+		fprintf(stdout, "Success!\n");
 	}
 	else if (strstr(response_buf, "409 Conflict")) {
 		printf("You have unread messages on the server. Please retrieve the messages before "

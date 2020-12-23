@@ -156,8 +156,6 @@ int main(int argc, char **argv) {
 
 	// --------- Get server response ---------- //
 	char response_buf[4096];
-
-	fprintf(stdout, "\nSERVER RESPONSE:\n");
 	err = SSL_read(ssl, response_buf, sizeof(response_buf) - 1);
 	response_buf[err] = '\0';
 
@@ -182,7 +180,7 @@ int main(int argc, char **argv) {
 			goto CLEANUP;
 		}
 
-		fprintf(stdout, "Success!");
+		fprintf(stdout, "Success!\n");
 	}
 	else {
 		// remove the temporary private key; we don't need it anymore and it shouldn't be saved
