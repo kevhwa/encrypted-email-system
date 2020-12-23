@@ -44,7 +44,7 @@ echo -e "\n**** 6. Test attempt to send a message to a user who doesn't exist an
 
 ./bin/sendmsg -f ./mailboxes/$USER/test.txt -r addleness this-user-doesnt-exist
 
-echo -e "\n***** 7. Testing what happens when fed endless data file"
-./bin/sendmsg -f /dev/random -r $USER addleness polypose
+# echo -e "\n***** 7. Testing what happens when fed endless data file"
+# ./bin/sendmsg -f /dev/random -r $USER addleness polypose
 
 echo -e "***********************************************************\n";

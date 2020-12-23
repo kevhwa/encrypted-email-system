@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
 	FILE* fp;
 	if (!(fp = fopen(path, "r"))) {
 		fprintf(stderr, "Sorry, the file your provided could not be opened. "
-			"Did you provide the file path correctly?");
+			"Did you provide the file path correctly?\n");
 		exit(1);
 	}
 	fseek(fp, 0L, SEEK_END);     // go to the end of the file
@@ -174,7 +174,6 @@ int main(int argc, char **argv) {
 
 	// --------- Get server response ---------- //
 
-	printf("Ready to receive server response...\n");
 	RequestHandler* request_handler = NULL;
 	CertificatesHandler *certs_handler = NULL;
 
@@ -236,9 +235,6 @@ int main(int argc, char **argv) {
 		char rcpt_cert_buf[128];
 		snprintf(rcpt_cert_buf, sizeof(rcpt_cert_buf), RECIPIENT_CERT_TEMPLATE,
 				username, certs_handler->recipients[i]);
-
-		printf("Encrypted message will be stored at %s\n", encrypt_msg_path_buf);
-		printf("Recipient cert stored at %s\n", rcpt_cert_buf);
 
 		if (encrypt_message(path, rcpt_cert_buf, encrypt_msg_path_buf)) {
 			fprintf(stderr, "Encryption step failed for %s\n", rcpt_cert_buf);
@@ -521,9 +517,6 @@ void print_usage_information() {
 CertificatesHandler* parse_certificates(char *body) {
 	CertificatesHandler *certificates_handler;
 
-	printf("** Attempting to parse certificates...\n");
-	printf("This is the body retrieved:\n%s\n", body);
-
 	if (!(certificates_handler = (CertificatesHandler*) malloc(sizeof(CertificatesHandler)))) {
 		fprintf(stderr, "Could not create certificates handler for request.\n");
 		return NULL;
@@ -613,7 +606,6 @@ CertificatesHandler* parse_certificates(char *body) {
 		strcpy(certificates_handler->certificates[j], cert_buf);
 		j++;
 	}
-	printf("Got to here..\n");
 
 	// there should be a trailing \n and that's it
 	line = strtok(NULL, "");
@@ -622,7 +614,6 @@ CertificatesHandler* parse_certificates(char *body) {
 		free_certificates_handler(certificates_handler);
 		return NULL;
 	}
-	printf("Done parsing certs\n");
 	return certificates_handler;
 }
 

@@ -31,4 +31,4 @@ echo -e "\n**** 3. Attempt to retrieve a message from mailbox when 0 messages ex
 
 ./bin/recvmsg
 
-echo -e "***********************************************************\n";
+echo -e "\n***********************************************************\n";
