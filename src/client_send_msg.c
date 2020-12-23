@@ -176,8 +176,6 @@ int main(int argc, char **argv) {
 	CertificatesHandler *certs_handler = NULL;
 
 	request_handler = parse_ssl_response(ssl);
-	fprintf(stdout, "request handler body:\n%s\n", request_handler->request_content);
-
 	if (!request_handler) {
 		fprintf(stdout, "Could not obtain certificates from server for "
 			"your recipients. Try again later.\n");
@@ -514,7 +512,7 @@ CertificatesHandler* parse_certificates(char *body) {
 		return NULL;
 	}
 	certificates_handler->num = 0;
-	
+
 	// get first line of message
 	char *line = strtok(body, "\n");
 	if (!line) {
@@ -602,7 +600,7 @@ CertificatesHandler* parse_certificates(char *body) {
 
 	// there should be a trailing \n and that's it
 	line = strtok(NULL, "");
-	if (line && (strlen(line) == 0 || !(strlen(line) == 1 && line[0] == '\n'))) { {
+	if (line && (strlen(line) == 0 || !(strlen(line) == 1 && line[0] == '\n'))) {
 		fprintf(stderr, "The certificates has unexpected leftover content of len (%lu):\n'%s'\n", strlen(line), line);
 		free_certificates_handler(certificates_handler);
 		return NULL;
