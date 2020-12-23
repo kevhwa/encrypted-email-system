@@ -4,6 +4,7 @@
 #include <string.h>
 #include "custom_utils.h"
 
+
 /**
  * Removes any temporary files with file names beginning with "tmp_".
  * Returns 1 if successful, 0 if error.

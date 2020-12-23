@@ -14,7 +14,7 @@ Create the encrypted messaging system with the following make command. This will
 ```
 $ make install-with-security DEST=tree
 ```
-Running this command will leave you in the server sandbox. You can exit simply by typing `exit`, but you'll need sudo to re-enter.
+Running this command will leave you in the server sandbox. You can exit simply by typing `exit`, but you'll need sudo to re-enter to start the server. See instructions on starting the server below.
 
 **Please make sure that the tree specified does not already exist.** If it does, please run:
 ```
@@ -33,9 +33,21 @@ For easy testing and debugging, the installation script generates a message-syst
 
 The server needs to be run as two instances: one running on port 8080 that accepts client usernames/passwords for authentication and another running on port 8081 that accepts and verifies user certificates.
 
-If you installed the system using `make install-with-security`, the sandboxing setup should have brought you into the server directory, `server-dir`. The easiest way to start the server(s) from there is simply by running:
+If you installed the system using `make install-with-security`, the sandboxing setup should have brought you directly into the server directory, `server-dir`. The easiest way to start the server(s) from there is simply by running:
 ```
-$ ./start_sandboxed_server.sh
+$ (trap 'kill 0' SIGINT; ./bin/server & ./bin/server -a)
+```
+This command will start both server instances, and all you to quit both instances at the same time using `control + C`. 
+
+Alternatively, you can start both server instances in individual terminal windows from the `./tree/server-dir` directory. You'll need to `sudo` into the server directory to start the second server instance.
+```
+$  # in the installation terminal (you should already be in the sandbox)
+$ ./bin/server 
+$ 
+$ # go to another terminal window and traverse to server-dir
+# sudo -s
+# cd tree/server-dir
+$ ./bin/server -a  
 ```
 
 If you installed the system with `make install-basic` then you can run the following command, where `tree` is the name of the messaging system tree you used:
@@ -94,15 +106,16 @@ $ ./bin/recvmsg
 
 ## Testing
 
-There are few test scripts configured...
+Test scripts for the four client executables can be found within the `tests/` directory.
 
-After running `make install-basic ...` start the server (this will start both server instances, on both ports):
+To run the tests, install the system using `make install-basic` and start the server (this will start both server instances, on both ports):
 ```
-$ ./bin/start_server.sh
+$ ./bin/start_server.sh tree  # tree is the name of the message system
 ```
 
-Then you can then run tests via:
+In a new terminal window, then you can then run tests via the following commands, issued from the project root. Please run them in order:
 ```
-$ ./tests/test_certificate_creation.sh
-$ ./tests/send_msg.sh
+$ ./tests/test_certificate_creation.sh tree # tests getcert and changepw 
+$ ./tests/test_recvmsg.sh tree	
+$ ./tests/test_sendmsg.sh tree
 ```

@@ -43,6 +43,12 @@ int main(int argc, char **argv) {
 	SSL_CTX *ctx;
 	int sock;
 
+	if (argc > 1) {
+		fprintf(stderr, "Unexpected arguments received. No arguments are required "
+			"for this program.\nExample usage of this program:\n$ ./bin/recvmsg\n");
+		exit(1);
+	}
+
 	// figure out who the user is so that their certificate and key can be configured
 	char *username;
 	struct passwd *pass; 
@@ -132,8 +138,6 @@ int main(int argc, char **argv) {
 	err = SSL_read(ssl, response_buf, sizeof(response_buf) - 1);
 	response_buf[err] = '\0';
 
-	printf("This is the server response:\n%s\n", response_buf);
-
 	if (strstr(response_buf, "200 Success")) {
 		
 		// find the content length returned
@@ -152,11 +156,11 @@ int main(int argc, char **argv) {
 		content_length = atoi(content_ptr + 1);
 		if (content_length == 0) {
 			fprintf(stdout, "You have no unread messages at this time\n");
+			goto CLEANUP;
 		}
 
 		// ----- Parse Sender Information from Request Body ------ //
-		//
-		
+
 		char *remaining_content;
 		if (!(remaining_content = strtok(NULL, ""))
 				|| strlen(remaining_content) < 2

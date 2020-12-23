@@ -10,15 +10,12 @@ if [ $USER != 'root' ]
     exit 1
 fi
 
-
 export J=./$dir/server-dir
 
 mkdir -p $J
 mkdir -p $J/{bin,lib64,lib}
 mkdir -p $J/lib64/x86_64-linux-gnu
 mkdir -p $J/lib/x86_64-linux-gnu
-
-cp ./bin/start_sandboxed_server.sh $J
 
 cp /bin/{bash,ls} $J/bin
 

@@ -19,10 +19,15 @@
 
 #define h_addr h_addr_list[0] /* for backward compatibility */
 #define TRUSTED_CA "trusted_ca/ca-chain.cert.pem"
+#define TEMP_PRIVATE_KEY_FILE "mailboxes/%s/tmp_%s.private.key"
+#define PRIVATE_KEY_FILE "mailboxes/%s/%s.private.key"
+#define CSR_FILE "mailboxes/%s/cert_req.pem"
+#define CERTIFICATE_FILE "mailboxes/%s/%s.cert.pem"
 
+int user_has_existing_cert(char *username);
 int tcp_connection(char *host_name, int port);
 void print_usage_information();
-EVP_PKEY *generate_key(char *username);
+EVP_PKEY *generate_key(char *username, char *key_path);
 X509_REQ *generate_cert_req(EVP_PKEY *p_key, char *username, int *size);
 void read_x509_req_from_file(char *uname, char *x509_buf, size_t buf_size);
 int write_x509_req_to_file(X509_REQ *p_x509_req, char *path);
@@ -42,6 +47,14 @@ int main(int argc, char **argv) {
 
 	if (get_username_password(argc, argv, pass, uname, MAX_LENGTH) < 0) {
 		print_usage_information();
+		exit(1);
+	}
+
+	// check to see if there is already a cert for this user
+	if (!user_has_existing_cert(uname)) {
+		fprintf(stdout, "You do not have a certificate yet. You may use this "
+			"program to change your password and certificate only after you have "
+			"used the 'getcert' program to create an initial certificate.\n");
 		exit(1);
 	}
 
@@ -117,9 +130,10 @@ int main(int argc, char **argv) {
 	char content_buf[200];
 	int cert_size = 0;
 	EVP_PKEY *p_key;
-
-
-	if (!(p_key = generate_key(uname))) {
+	
+	char tmp_key_path[100];
+	snprintf(tmp_key_path, sizeof(tmp_key_path), TEMP_PRIVATE_KEY_FILE, uname, uname);
+	if (!(p_key = generate_key(uname, tmp_key_path))) {
 		fprintf(stderr, "Are you sure you submitted your username correctly?\n");
 		SSL_shutdown(ssl);
 		SSL_free(ssl);
@@ -151,41 +165,66 @@ int main(int argc, char **argv) {
 
 	// --------- Get server response ---------- //
 	char response_buf[4096];
-
-	fprintf(stdout, "\nSERVER RESPONSE:\n");
 	err = SSL_read(ssl, response_buf, sizeof(response_buf) - 1);
 	response_buf[err] = '\0';
 
 	if (strstr(response_buf, "200 Success")) {
-		printf("Success!\n");
+
+		// replace the old private key with the new private key by renaming the tmp file
+		char key_path[100];
+		snprintf(key_path, sizeof(key_path), PRIVATE_KEY_FILE, uname, uname);
+		if (rename(tmp_key_path, key_path)) {
+			fprintf(stderr, "Could not replace your old private key. Password change was unsuccessful.");
+			goto CLEANUP;
+		}
 
 		char cert_buf[4096];
 		err = SSL_read(ssl, cert_buf, sizeof(cert_buf) - 1);
 		cert_buf[err] = '\0';
 
-		printf("Certificate:\n%s\n", cert_buf);
 		char path_buf[100];
-		snprintf(path_buf, sizeof(path_buf), "mailboxes/%s/%s.cert.pem", uname,
-				uname);
+		snprintf(path_buf, sizeof(path_buf), CERTIFICATE_FILE, uname, uname);
 		if (!write_x509_cert_to_file(cert_buf, path_buf)) {
 			printf("Could not save newly generated certificate to a local file.\n");
+			goto CLEANUP;
 		}
-	}
-	else if (strstr(response_buf, "409 Conflict")) {
-		printf("You have unread messages on the server. Please retrieve the messages before "
-			"requesting a password change and new certificate.\n");
+
+		fprintf(stdout, "Success!\n");
 	}
 	else {
-		printf("Sorry, your certificate could not be generated.\n");
+		// remove the temporary private key; we don't need it anymore and it shouldn't be saved
+		remove(tmp_key_path);
+		
+		printf("Sorry, your password could not be changed.\n");
+		if (strstr(response_buf, "409 Conflict")) {
+		printf("You have unread messages on the server. Please retrieve the messages "
+			"before proceeding.\n");
+		}
+		else if (strstr(response_buf, "401 Unauthorized")) {
+			printf("The credentials you provided are incorrect. Please try again.\n");
+		}
 	}
-
+	
 	// ------- Clean Up -------- //
+CLEANUP:
 	EVP_PKEY_free(p_key);
 	SSL_shutdown(ssl);
 	SSL_free(ssl);
 	close(sock);
 	return 0;
 }
+
+/**
+ * Check if a user already has a certificate.
+ * Returns 0 if false, 1 if true.
+ */
+int user_has_existing_cert(char *username) {
+	
+	char path_buf[64];
+	snprintf(path_buf, sizeof(path_buf), CERTIFICATE_FILE, username, username);
+  	return (access(path_buf, F_OK) == 0);  // F_OK tests for existence of file
+}
+
 
 /**
  * Wrties a X509 Certificate to file.
@@ -303,8 +342,7 @@ X509_REQ* generate_cert_req(EVP_PKEY *p_key, char *username, int *size) {
 
 	// -- Save X509 REQ to a file, saving the size of content written -- //
 	char path_buf[100];
-	snprintf(path_buf, sizeof(path_buf), "mailboxes/%s/cert_req.pem",
-			username);
+	snprintf(path_buf, sizeof(path_buf), CSR_FILE, username);
 	*size = write_x509_req_to_file(p_x509_req, path_buf);
 	return p_x509_req;
 }
@@ -345,7 +383,7 @@ void read_x509_req_from_file(char *uname, char *x509_buf, size_t buf_size) {
 
 	// Open the newly saved cert_req.pm file, as char *
 	char path_buf[100];
-	snprintf(path_buf, sizeof(path_buf), "mailboxes/%s/cert_req.pem", uname);
+	snprintf(path_buf, sizeof(path_buf), CSR_FILE, uname);
 	FILE *cert_file = fopen(path_buf, "rb+");
 	if (!cert_file) {
 		printf("Could not open file for cert request.\n");
@@ -367,7 +405,7 @@ void read_x509_req_from_file(char *uname, char *x509_buf, size_t buf_size) {
  * Generate a 2048-bit RSA key and save to a file
  * under the specified username.
  */
-EVP_PKEY* generate_key(char *username) {
+EVP_PKEY* generate_key(char *username, char *key_path) {
 
 	// --- create the RSA KEY ----
 	EVP_PKEY_CTX *ctx;
@@ -390,11 +428,10 @@ EVP_PKEY* generate_key(char *username) {
 		return NULL;
 	}
 
-	// --- Save the RSA key to file ----
-	char path_buf[100];
-	snprintf(path_buf, sizeof(path_buf), "mailboxes/%s/%s.private.key", username, username);
-
-	FILE *pkey_file = fopen(path_buf, "wb");
+	// --- Save the RSA key to file ----- //
+	//  this is a tmp file in case the new certificate cannot be created
+	// so that the program doesn't override the existing private key until it is ready to do so
+	FILE *pkey_file = fopen(key_path, "wb");
 	if (!pkey_file) {
 		printf("Could not open and write private key to file.\n");
 		EVP_PKEY_free(pkey);

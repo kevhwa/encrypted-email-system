@@ -19,7 +19,9 @@
 
 #define h_addr h_addr_list[0] /* for backward compatibility */
 #define TRUSTED_CA "trusted_ca/ca-chain.cert.pem"
+#define CLIENT_CERT_PATH_TEMPLATE "mailboxes/%s/%s.cert.pem"
 
+int user_has_existing_cert(char *username);
 int tcp_connection(char *host_name, int port);
 void print_usage_information();
 EVP_PKEY *generate_key(char *username);
@@ -41,6 +43,13 @@ int main(int argc, char **argv) {
 
 	if (get_username_password(argc, argv, pass, uname, MAX_LENGTH) < 0) {
 		print_usage_information();
+		exit(1);
+	}
+
+	// check to see if there is already a cert for this user
+	if (user_has_existing_cert(uname)) {
+		fprintf(stdout, "You already have a certificate! If you need a new one, "
+		"use the 'changepw' program to create a new password and certificate.\n");
 		exit(1);
 	}
 
@@ -139,29 +148,30 @@ int main(int argc, char **argv) {
 
 	// --------- Get server response ---------- //
 	char response_buf[4096];
-
-	fprintf(stdout, "\nSERVER RESPONSE:\n");
 	err = SSL_read(ssl, response_buf, sizeof(response_buf) - 1);
 	response_buf[err] = '\0';
 
 	if (strstr(response_buf, "200 Success")) {
-		printf("Success!\n");
 
 		char cert_buf[4096];
 		err = SSL_read(ssl, cert_buf, sizeof(cert_buf) - 1);
 		cert_buf[err] = '\0';
 
-		printf("Certificate:\n%s\n", cert_buf);
 		char path_buf[100];
-		snprintf(path_buf, sizeof(path_buf), "mailboxes/%s/%s.cert.pem", uname,
+		snprintf(path_buf, sizeof(path_buf), CLIENT_CERT_PATH_TEMPLATE, uname,
 				uname);
 		if (!write_x509_cert_to_file(cert_buf, path_buf)) {
 			printf("Could not save newly generated certificate to a local file.\n");
 		}
+		
+		fprintf(stdout, "Success!\n");
 	}
 	else if (strstr(response_buf, "409 Conflict")) {
 		printf("You have unread messages on the server. Please retrieve the messages before "
 			"requesting a new certificate.\n");
+	}
+	else if (strstr(response_buf, "401 Unauthorized")) {
+		printf("The credentials you provided are incorrect. Please try again.\n");
 	}
 	else {
 		printf("Sorry, your certificate could not be generated.\n");
@@ -173,6 +183,17 @@ int main(int argc, char **argv) {
 	SSL_free(ssl);
 	close(sock);
 	return 0;
+}
+
+/**
+ * Check if a user already has a certificate.
+ * Returns 0 if false, 1 if true.
+ */
+int user_has_existing_cert(char *username) {
+	
+	char path_buf[64];
+	snprintf(path_buf, sizeof(path_buf), CLIENT_CERT_PATH_TEMPLATE, username, username);
+  	return (access(path_buf, F_OK) == 0);  // F_OK tests for existence of file
 }
 
 /**

@@ -97,7 +97,6 @@ RequestHandler* parse_ssl_response(SSL *ssl) {
 	} while (1);
 
 	if (!is_valid_header) return NULL;
-	
 	header[received] = '\0';
 
 	char* header_cpy = malloc(strlen(header) + 1);
@@ -106,8 +105,6 @@ RequestHandler* parse_ssl_response(SSL *ssl) {
 		return NULL;
 	}
 	strcpy(header_cpy, header);
-
-	fprintf(stdout, "Received %d chars of header:\n---\n%s----\n", received, header);
 
 	// get first line of message
 	char* line = strtok(header_cpy, "\n");
@@ -134,7 +131,7 @@ RequestHandler* parse_ssl_response(SSL *ssl) {
 		request_handler->command = UserCerts;
 	} else if ((strncmp(success, line, strlen(success)) == 0)) {
 		request_handler->command = SuccessResponse;		
-} 
+	} 
 
 	// invalid request; could not match the endpoint requested to known endpoint
 	if (request_handler->command == InvalidCommand) {
@@ -175,12 +172,11 @@ RequestHandler* parse_ssl_response(SSL *ssl) {
 	}
 	memset(body, '\0', content_length + 1);
 
-	printf("Ready to receive server certificate content...\n");
 	received = 0;
 	while (received < content_length) {
 		memset(buf, '\0', sizeof(buf));
 		bytes = SSL_read(ssl, buf, sizeof(buf) - 1);
-		fprintf(stdout, "Body received %d chars of content:\n---\n%s----\n", bytes, buf);
+		// fprintf(stdout, "Body received %d chars of content:\n---\n%s----\n", bytes, buf);
 		if (bytes <= 0) {
 			printf("SSL response parser entered error state, exiting...\n");
 			free_request_handler(request_handler);
@@ -188,8 +184,7 @@ RequestHandler* parse_ssl_response(SSL *ssl) {
 		}
 		strcat(body, buf);
 		received += bytes;
-
-		printf("Received %d so far, expecting %d\n", received, content_length);
+		// printf("Received %d so far, expecting %d\n", received, content_length);
 	}
 	request_handler->request_content = body;
 	return request_handler;

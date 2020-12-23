@@ -81,22 +81,26 @@ int main(int argc, char **argv) {
 		exit(1);
 	}
 	
-	// -------- Make sure file can be read -------- //
-	FILE* fp = fopen(path, "r");
+	// -------- Make sure file can be read and is valid size -------- //
+
+	FILE* fp;
+	if (!(fp = fopen(path, "r"))) {
+		fprintf(stderr, "Sorry, the file your provided could not be opened. "
+			"Did you provide the file path correctly?\n");
+		exit(1);
+	}
 	fseek(fp, 0L, SEEK_END);     // go to the end of the file
 	int n_bytes = ftell(fp);     // get the number of bytes
 	fseek(fp, 0L, SEEK_SET);     // reset to beginning of file
 
-	if (fp == NULL) {
-		printf("The file you submitted cannot be opened or read\n");
-		return 2;
-	}	else if (n_bytes > MAX_MAIL_SIZE) {
-		printf("The file you submitted exceeds the maximum allowed size\n");
-		return 2;
+	if (n_bytes > MAX_MAIL_SIZE) {
+		fprintf(stderr, "The file you submitted exceeds the maximum allowed size.\n");
+		exit(2);
 	}
 	fclose(fp);
 
-	// create the TCP socket
+	// -------  create the TCP socket ------- //
+
 	if ((sock = tcp_connection("localhost", SERVER_PORT)) < 0) {
 		fprintf(stdout, "Could not create TCP socket...\n");
 		return 2;
@@ -159,39 +163,39 @@ int main(int argc, char **argv) {
 	}
 
 	// -------- Provide content to server -------- //
+
 	char obuf[4096];
 	sprintf(obuf, "GET /certificates HTTP/1.0\nContent-Length: %lu\n\n%s",
 			strlen(rcpts), rcpts);
-
-	printf("This is the buffer sent to the server:\n%s\n", obuf);
-	printf("These are the recipients: %s\n", rcpts);
 
 	SSL_write(ssl, obuf, strlen(obuf));
 
 	// --------- Get server response ---------- //
 
-	printf("Ready to receive server response...\n");
-	RequestHandler* request_handler = parse_ssl_response(ssl);
+	RequestHandler* request_handler = NULL;
+	CertificatesHandler *certs_handler = NULL;
+
+	request_handler = parse_ssl_response(ssl);
 	if (!request_handler) {
-		fprintf(stdout, "Did not receive valid response from GET /certificates");
+		fprintf(stdout, "Could not obtain certificates from server for "
+			"your recipients. Try again later.\n");
 		goto CLEANUP;
 	} else if (request_handler->command != SuccessResponse) {
-		fprintf(stdout, "Did not receive successful response from GET /certificates");
-		free_request_handler(request_handler);
+		fprintf(stderr, "Could not find certificates for your list of recipients. "
+			"Please ensure the recipients exist and that they have generated "
+			"certificates with 'getcert'.\n");
 		goto CLEANUP;
 	}
 
-	printf("Received recipient certificates!\n");
-	CertificatesHandler *certs_handler = parse_certificates(request_handler->request_content);
-	if (certs_handler == NULL) {
+	certs_handler = parse_certificates(request_handler->request_content);
+	if (!certs_handler) {
 		printf("Could not parse certificates in response message received from server.\n");
-		free_request_handler(request_handler);
 		goto CLEANUP;
 	} 
 
-	printf("Successfully parsed certificates!\n");
 	if (certs_handler->num == 0) {
-		printf("No valid recipients found.\n");
+		fprintf(stderr, "No valid recipients found.\n");
+		goto CLEANUP;
 	}
 	else {
 		FILE *tmpfile;
@@ -202,7 +206,6 @@ int main(int argc, char **argv) {
 			if (certs_handler->certificates[i] == NULL)
 				continue;
 				
-			printf("Attempting to write certificate to file...\n");
 			snprintf(path_buf, sizeof(path_buf), RECIPIENT_CERT_TEMPLATE,
 					username, certs_handler->recipients[i]);
 
@@ -213,8 +216,6 @@ int main(int argc, char **argv) {
 		}
 	}
 	// ------ Encrypt messages and send them to the server----- //
-
-	printf("Encrypting messages to send to server...\n");
 
 	for (int i = 0; i < certs_handler->num; i++) {
 		if (certs_handler->certificates[i] == NULL) {
@@ -230,15 +231,10 @@ int main(int argc, char **argv) {
 		snprintf(rcpt_cert_buf, sizeof(rcpt_cert_buf), RECIPIENT_CERT_TEMPLATE,
 				username, certs_handler->recipients[i]);
 
-		printf("Encrypted message will be stored at %s\n", encrypt_msg_path_buf);
-		printf("Recipient cert stored at %s\n", rcpt_cert_buf);
-
 		if (encrypt_message(path, rcpt_cert_buf, encrypt_msg_path_buf)) {
 			fprintf(stderr, "Encryption step failed for %s\n", rcpt_cert_buf);
 			goto CLEANUP;
 		}
-
-		printf("Successfully encrypted messages...\n");
 
 		char signed_msg_path_buf[128];
 		sprintf(signed_msg_path_buf, SIGNED_MSG_TEMPLATE, username);
@@ -247,8 +243,6 @@ int main(int argc, char **argv) {
 			fprintf(stderr, "Digital signature step failed...\n");
 			goto CLEANUP;
 		}
-
-		printf("Successfully signed messages...\n");
 
 		// ----- Send the content in signed_msg_path_buf to the server ------//
 		// read in signed, encrypted content from file
@@ -266,13 +260,7 @@ int main(int argc, char **argv) {
 		file_buf[content] = '\0';
 		fclose(fp);
 
-		// send the content to server... content formatted as:
-		//
-		// POST /sendmsg HTTP/1.0
-		// Content-Length: X
-		//
-		// sender 
-		// recipient
+		// send the content to server
 		char header_buf[256];
 		char content_buf[256 + n_bytes];
 		int body_len = strlen(certs_handler->recipients[i]) + strlen(username) 
@@ -281,7 +269,6 @@ int main(int argc, char **argv) {
 		sprintf(header_buf, "POST /sendmsg HTTP/1.0\nContent-Length: %d\n\n", body_len);
 		sprintf(content_buf, "%s\n%s\n%s", username, certs_handler->recipients[i], file_buf);
 
-		printf("Passing encrypted message content back to server...\n");
 		SSL_write(ssl, header_buf, strlen(header_buf));
 		SSL_write(ssl, content_buf, strlen(content_buf));
 
@@ -305,8 +292,9 @@ int main(int argc, char **argv) {
 	SSL_write(ssl, end_buf, strlen(end_buf) + 1);
 
 	// ------- Clean Up -------- //
-	CLEANUP:
+CLEANUP:
 	remove_temporary_files_from_mailbox(username);
+	free_request_handler(request_handler);
 	free_certificates_handler(certs_handler);
 	SSL_shutdown(ssl);
 	SSL_free(ssl);
@@ -360,8 +348,6 @@ int sign_encrypted_message(char *encrypted_msg_path, char *signer_cert_path,
 	int flags = CMS_DETACHED | CMS_STREAM;
 	OpenSSL_add_all_algorithms();
 	ERR_load_crypto_strings();
-
-	printf("Attempting to sign message\n");
 
 	/* Read in signer certificate and private key */
 	tbio = BIO_new_file(signer_cert_path, "r");
@@ -441,8 +427,6 @@ int encrypt_message(char *msg_path, char *rcpt_cert_path, char *encrypted_msg_pa
 	OpenSSL_add_all_algorithms();
 	ERR_load_crypto_strings();
 
-	printf("Attempting to encrypt message\n");
-
 	/* Read in recipient certificate */
 	if (!(tbio = BIO_new_file(rcpt_cert_path, "rb+"))) {
 		fprintf(stderr, "Could not open recipient certificate at %s\n",
@@ -450,14 +434,10 @@ int encrypt_message(char *msg_path, char *rcpt_cert_path, char *encrypted_msg_pa
 		goto err;
 	}
 
-	printf("Here in encrypt msg 0\n");
-
 	if (!(rcert = PEM_read_bio_X509(tbio, NULL, 0, NULL))) {
 		fprintf(stderr, "Could not read recipient X509 from TBIO\n");
 		goto err;
 	}
-
-	// PEM_open_X509(fp, )
 
 	/* Create recipient STACK and add recipient cert to it */
 	recips = sk_X509_new_null();
@@ -465,8 +445,6 @@ int encrypt_message(char *msg_path, char *rcpt_cert_path, char *encrypted_msg_pa
 		fprintf(stderr, "Could not add recipient cert to stack\n");
 		goto err;
 	}
-
-	printf("Here in encrypt msg 1\n");
 
 	/*
 	 * sk_X509_pop_free will free up recipient STACK and its contents so set
@@ -490,8 +468,6 @@ int encrypt_message(char *msg_path, char *rcpt_cert_path, char *encrypted_msg_pa
 		fprintf(stderr, "Could not open new encrypted message file\n");
 		goto err;
 	}
-
-	printf("Here in encrypt msg 2\n");
 
 	/* Write out S/MIME message to file */
 	if (!SMIME_write_CMS(out, cms, in, flags)) {
@@ -531,9 +507,6 @@ void print_usage_information() {
 CertificatesHandler* parse_certificates(char *body) {
 	CertificatesHandler *certificates_handler;
 
-	printf("** Attempting to parse certificates...\n");
-	printf("This is the body retrieved:\n%s\n", body);
-
 	if (!(certificates_handler = (CertificatesHandler*) malloc(sizeof(CertificatesHandler)))) {
 		fprintf(stderr, "Could not create certificates handler for request.\n");
 		return NULL;
@@ -542,7 +515,7 @@ CertificatesHandler* parse_certificates(char *body) {
 
 	// get first line of message
 	char *line = strtok(body, "\n");
-	if (line == NULL) {
+	if (!line) {
 		return NULL;
 	}
 	int num_certs = atoi(line);
@@ -550,7 +523,6 @@ CertificatesHandler* parse_certificates(char *body) {
 		free_certificates_handler(certificates_handler);
 		return NULL;
 	}
-	printf("Parsing %d certificates...\n", num_certs);
 
 	certificates_handler->num = num_certs;
 	certificates_handler->certificates = (char**) malloc((num_certs) * sizeof(char*));
@@ -561,9 +533,8 @@ CertificatesHandler* parse_certificates(char *body) {
 
 		// next line should be the recipient name
 		line = strtok(NULL, "\n");
-		printf("This is the recipient line parsed:\n%s\n", line);
-		if (line == NULL) {
-			fprintf(stderr, "Could not return recipient for certificate %d", j);
+		if (!line) {
+			fprintf(stderr, "Could not return recipient for certificate #%d\n", j);
 			free_certificates_handler(certificates_handler);
 			return NULL;
 		}
@@ -587,10 +558,11 @@ CertificatesHandler* parse_certificates(char *body) {
 			cert_len += (strlen(start_cert) + 1);
 
 		} else if (!strcmp(line, no_cert)) {
-			fprintf(stdout, "No certificate is available for %s recipient..\n",
+			fprintf(stdout, "No certificate is available for %s recipient at this time...\n",
 					certificates_handler->recipients[j]);
 			certificates_handler->certificates[j] = NULL;
 			line = strtok(NULL, "\n");
+			j++;
 			continue;
 
 		} else {
@@ -616,7 +588,6 @@ CertificatesHandler* parse_certificates(char *body) {
 		}
 		cert_buf[cert_len] = '\0';
 
-		printf("This is the certificate parsed:\n%s\n", cert_buf);
 		if (!strlen(cert_buf)) {
 			fprintf(stderr, "Could not return certificate for certificate %d", j);
 			free_certificates_handler(certificates_handler);
@@ -626,26 +597,28 @@ CertificatesHandler* parse_certificates(char *body) {
 		strcpy(certificates_handler->certificates[j], cert_buf);
 		j++;
 	}
-	printf("Got to here..\n");
 
 	// there should be a trailing \n and that's it
 	line = strtok(NULL, "");
-	if (strlen(line) == 0 || !(strlen(line) == 1 && line[0] == '\n')) {
+	if (line && (strlen(line) == 0 || !(strlen(line) == 1 && line[0] == '\n'))) {
 		fprintf(stderr, "The certificates has unexpected leftover content of len (%lu):\n'%s'\n", strlen(line), line);
 		free_certificates_handler(certificates_handler);
 		return NULL;
 	}
-	printf("Done parsing certs\n");
 	return certificates_handler;
 }
 
 void free_certificates_handler(CertificatesHandler *certificates_handler) {
-	if (certificates_handler == NULL) {
+	if (!certificates_handler) {
 		return;
 	}
 	for (int j = 0; j < certificates_handler->num; j++) {
-		free(certificates_handler->certificates[j]);
-		free(certificates_handler->recipients[j]);
+		if (certificates_handler->certificates[j]) {
+			free(certificates_handler->certificates[j]);
+		}
+		if (certificates_handler->recipients[j]) {
+			free(certificates_handler->recipients[j]);
+		}
 	}
 	free(certificates_handler->certificates);
 	free(certificates_handler->recipients);
