@@ -144,7 +144,7 @@ int main(int argc, char **argv) {
 	// -------- Provide content to server -------- //
 	sprintf(content_buf, "%s\n%s\n%s\n", uname, pass, new_pass);
 	sprintf(obuf, "POST /changepw HTTP/1.0\nContent-Length: %lu\n\n%s",
-			strlen(content_buf) + cert_size + strlen(new_pass), content_buf);
+			strlen(content_buf) + cert_size, content_buf);
 
 	SSL_write(ssl, obuf, strlen(obuf));
 	SSL_write(ssl, cert_buf, cert_size);
