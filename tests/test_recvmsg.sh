@@ -6,7 +6,7 @@ dir="$1"
 
 echo -e "\n************ Starting acceptance tests for recvmsg executable *************";
 
-echo -e "\n**** Setup: Sending two messages self ***\n"
+echo -e "\n**** Setup: Sending two messages to self ****\n"
 
 # remove any existing awaiting files in the user's mailbox to start fresh
 sudo find $dir/server-dir/mailboxes/$USER -type f ! -name "*.pem" -delete  # delete all the files except the .pem ones

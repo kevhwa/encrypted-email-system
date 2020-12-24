@@ -155,7 +155,7 @@ int main(int argc, char **argv) {
 
 		content_length = atoi(content_ptr + 1);
 		if (content_length == 0) {
-			fprintf(stdout, "You have no unread messages at this time\n");
+			fprintf(stdout, "You have no unread messages at this time.\n");
 			goto CLEANUP;
 		}
 

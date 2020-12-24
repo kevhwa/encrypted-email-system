@@ -147,7 +147,11 @@ int main(int argc, char **argv) {
 			}
 			fprintf(stderr, "SSL error: %s\n", s);
 			ERR_print_errors_fp(stderr);
-			return 3;
+			
+			SSL_shutdown(ssl);
+			SSL_free(ssl);
+			close(rqst);
+			continue;
 		}
 		
 		// --- Validate request and send resp back to the SSL client ---
@@ -335,10 +339,9 @@ int main(int argc, char **argv) {
 				cert_fp = fopen(path_buf, "r");
 				if (!cert_fp) {
 					fprintf(stdout, "Could not find certificate for recipient '%s'\n", certs_recpts[i]);
-					cert_data = "NOCERT";
+					cert_data = "NOCERT\n";
 				}
 				else {
-					fprintf(stdout, "Found certificate for recipient %s\n", certs_recpts[i]);
 					fseek(cert_fp, 0, SEEK_END);
 					file_size = ftell(cert_fp);
 					fseek(cert_fp, 0, SEEK_SET);
@@ -510,9 +513,7 @@ int main(int argc, char **argv) {
 		SSL_shutdown(ssl);
 		SSL_free(ssl);
 		close(rqst);
-		if (request_handler != NULL) {
-			free_request_handler(request_handler);
-		}
+		free_request_handler(request_handler);
 	}
 	close(sock);
 	SSL_CTX_free(ctx);

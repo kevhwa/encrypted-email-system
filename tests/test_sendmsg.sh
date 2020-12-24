@@ -52,10 +52,18 @@ echo -e "\n**** 6. Test attempt to send a message to a user who doesn't exist an
 
 ./bin/sendmsg -f ./mailboxes/$USER/test.txt -r addleness this-user-doesnt-exist
 
-echo -e "\n***** 7. Testing what happens when fed endless data file"
-mkfifo ./tests/msgpipe
-sh ./tests/endless_gen.sh > ./tests/msgpipe &
-./bin/sendmsg -f ./tests/msgpipe -r $USER addleness polypose
-rm ./tests/msgpipe
+echo -e "\n**** 7. Test attempt to send a message to two users who don't have certificates.***\n"
+
+./bin/sendmsg -f ./mailboxes/$USER/test.txt -r whaledom repine
+
+echo -e "\n**** 8. Test attempt to send a message to two users who don't have certificates 1 that has one.***\n"
+
+./bin/sendmsg -f ./mailboxes/$USER/test.txt -r whaledom addleness repine
+
+echo -e "\n***** 9. Testing what happens when fed endless data file. ***\n"
+
+../../tests/endless_gen.sh
+./bin/sendmsg -f ../../tests/big_test_file.txt -r $USER addleness polypose
+rm ../../tests/big_test_file.txt
 
 echo -e "\n***********************************************************\n";

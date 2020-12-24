@@ -9,7 +9,7 @@ cwd=$(pwd)
 export ROOT_CA_DIR=$cwd/$dir/rootca-dir
 export INTERMEDIATE_CA_DIR=$cwd/$dir/server-dir/ca
 
-echo "\nCreating Intermediate CA\n"
+echo -e "\nCreating Intermediate CA\n"
 
 # 1. Create a directory structure, same as used for root CA files.
 # Make sure to move the configuration file for OpenSSL to this directory.

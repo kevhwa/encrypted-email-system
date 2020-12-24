@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
 	sprintf(private_key_path, PRIVATE_KEY_TEMPLATE, username, username);
 
 	if (!(ctx = create_ctx_client(certificate_path, private_key_path, TRUSTED_CA, 1))) {
-		fprintf(stderr, "Please make sure that you have a private key and certificate "
+		fprintf(stderr, "Please make sure that you have a valid private key and certificate "
 				"before continuing. You can generate it using the 'getcert' program.\n");
 		exit(2);
 	}
@@ -168,7 +168,11 @@ int main(int argc, char **argv) {
 	sprintf(obuf, "GET /certificates HTTP/1.0\nContent-Length: %lu\n\n%s",
 			strlen(rcpts), rcpts);
 
-	SSL_write(ssl, obuf, strlen(obuf));
+	err = SSL_write(ssl, obuf, strlen(obuf));
+	if (err <= 0) {
+		printf("SSL write error...\n");
+		goto CLEANUP;
+	}
 
 	// --------- Get server response ---------- //
 
@@ -561,7 +565,6 @@ CertificatesHandler* parse_certificates(char *body) {
 			fprintf(stdout, "No certificate is available for %s recipient at this time...\n",
 					certificates_handler->recipients[j]);
 			certificates_handler->certificates[j] = NULL;
-			line = strtok(NULL, "\n");
 			j++;
 			continue;
 
