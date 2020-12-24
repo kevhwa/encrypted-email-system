@@ -16,6 +16,8 @@ $ make install-with-security DEST=tree
 ```
 Running this command will leave you in the server sandbox. You can exit simply by typing `exit`, but you'll need sudo to re-enter to start the server. See instructions on starting the server below.
 
+For easy testing and debugging, the installation script generates a message-system user for the current user (`$USER`) installing the system. For example, if a user `charlie` runs the installation script, then `charlie` becomes a valid message system user. Their password is automatically assigned as `testuser`.
+
 **Note: Please make sure that the tree specified does not already exist.** If it does, please run:
 ```
 $ sudo rm -rf tree
@@ -25,7 +27,6 @@ To install the program without security features (i.e., install no uses, file sy
 ```
 $ make install-basic DEST=tree
 ```
-For easy testing and debugging, the installation script generates a message-system user for the user installing the system. For example, if a user `charlie` runs the installation script, then `charlie` is a valid message system user. Their password is automatically assigned as `testuser`.
 
 ## Run
 
