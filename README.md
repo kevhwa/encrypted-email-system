@@ -2,7 +2,7 @@
 
 ## Install 
 
-First make sure that your virtual machine has build-essential and openssl packages available:
+First make sure that your virtual machine has the `build-essential`, `libssl-dev`, and `whois` packages available:
 ```
 $ sudo apt-get update
 $ sudo apt-get install build-essential   # basic essentials
@@ -16,7 +16,9 @@ $ make install-with-security DEST=tree
 ```
 Running this command will leave you in the server sandbox. You can exit simply by typing `exit`, but you'll need sudo to re-enter to start the server. See instructions on starting the server below.
 
-**Please make sure that the tree specified does not already exist.** If it does, please run:
+For easy testing and debugging, the installation script generates a message-system user for the current user (`$USER`) installing the system. For example, if a user `charlie` runs the installation script, then `charlie` becomes a valid message system user. Their password is automatically assigned as `testuser`.
+
+**Note: Please make sure that the tree specified does not already exist.** If it does, please run:
 ```
 $ sudo rm -rf tree
 ```
@@ -25,7 +27,6 @@ To install the program without security features (i.e., install no uses, file sy
 ```
 $ make install-basic DEST=tree
 ```
-For easy testing and debugging, the installation script generates a message-system user for the user installing the system. For example, if a user `charlie` runs the installation script, then `charlie` is a valid message system user. Their password is automatically assigned as `testuser`.
 
 ## Run
 
@@ -37,9 +38,9 @@ If you installed the system using `make install-with-security`, the sandboxing s
 ```
 $ (trap 'kill 0' SIGINT; ./bin/server & ./bin/server -a)
 ```
-This command will start both server instances, and all you to quit both instances at the same time using `control + C`. 
+This command will start both server instances. To quit both instances at the same, simply `control + C`. 
 
-Alternatively, you can start both server instances in individual terminal windows from the `./tree/server-dir` directory. You'll need to `sudo` into the server directory to start the second server instance.
+An alternative option is to start both server instances in individual terminal windows from the `./tree/server-dir` directory. You'll need to `sudo` into the server directory to start the second server instance, as this directory is only available to `root` and `server` users.
 ```
 $  # in the installation terminal (you should already be in the sandbox)
 $ ./bin/server 
@@ -50,9 +51,9 @@ $ # go to another terminal window and traverse to server-dir
 $ ./bin/server -a  
 ```
 
-If you installed the system with `make install-basic` then you can run the following command, where `tree` is the name of the messaging system tree you used:
+A final option, if you accidentally exit the sandbox and want to start the server, is to start both instances by using the following bash script from the project root directory (above the tree):
 ```
-$ ./start_server.sh tree
+$ ./bin/start_server.sh tree
 ```
 
 ### Client Programs 
