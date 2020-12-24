@@ -58,4 +58,13 @@ sh ./tests/endless_gen.sh > ./tests/msgpipe &
 ./bin/sendmsg -f ./tests/msgpipe -r $USER addleness polypose
 rm ./tests/msgpipe
 
+echo -e "\n***** 8. Testing what happens when sending large number of messages to mailbox"
+
+a=0
+while [ $a -lt 1000]
+do
+    ./bin/sendmsg -f ./mailboxes/$USER/test.txt -r $USER addleness polypose
+    a=`expr $a + 1`
+done
+
 echo -e "\n***********************************************************\n";

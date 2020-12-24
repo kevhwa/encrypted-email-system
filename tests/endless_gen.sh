@@ -1,4 +1,4 @@
-i=0
+a=0
 while [ $a -lt 1000000000]
 do
     echo "This is a loop"
