@@ -66,13 +66,4 @@ echo -e "\n***** 9. Testing what happens when fed endless data file. ***\n"
 ./bin/sendmsg -f ../../tests/big_test_file.txt -r $USER addleness polypose
 rm ../../tests/big_test_file.txt
 
-echo -e "\n***** 8. Testing what happens when sending large number of messages to mailbox"
-
-a=0
-while [ $a -lt 1000]
-do
-    ./bin/sendmsg -f ./mailboxes/$USER/test.txt -r $USER addleness polypose
-    a=`expr $a + 1`
-done
-
-echo -e "\n***********************************************************\n";
+echo -e "\n***********************************************************\n"
